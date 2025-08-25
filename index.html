@@ -35,6 +35,38 @@
             min-height: 100vh;
             padding: 0;
         }
+
+        .model-loading, .analysis-loading {
+            display: none;
+            align-items: center;
+            justify-content: center;
+            gap: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+            color: var(--secondary);
+            font-weight: 600;
+        }
+
+        .model-loading.active, .analysis-loading.active {
+            display: flex;
+        }
+
+        .model-loading.success, .analysis-loading.success {
+            background: var(--success);
+            color: white;
+        }
+
+        .model-loading.error, .analysis-loading.error {
+            background: var(--accent);
+            color: white;
+        }
+
+        .model-loading i, .analysis-loading i {
+            font-size: 1.5rem;
+        }
         
         .container {
             max-width: 1200px;
@@ -305,12 +337,6 @@
             color: var(--primary);
         }
         
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 20px;
-        }
-        
         .spinner {
             border: 4px solid rgba(0, 0, 0, 0.1);
             border-left: 4px solid var(--primary);
@@ -340,7 +366,6 @@
             color: #666;
         }
         
-        /* Report Generation Styles */
         .report-section {
             display: none;
             margin-top: 30px;
@@ -541,229 +566,232 @@
     </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <div class="logo">
-                <i class="fas fa-lungs"></i>
-                <h1>Chest X-ray Abnormality Detection</h1>
-            </div>
-            <p class="subtitle">Upload a chest X-ray image to detect potential abnormalities using advanced AI analysis</p>
-        </header>
-        
-        <div class="card">
-            <h2 class="card-title"><i class="fas fa-upload"></i> Upload X-ray Image</h2>
-            <div class="upload-area" id="uploadArea">
-                <i class="fas fa-file-medical-alt"></i>
-                <p class="upload-text">Drag & drop your chest X-ray image here or click to browse</p>
-                <input type="file" id="imageUpload" accept="image/*" class="file-input">
-                <label for="imageUpload" class="file-label">Choose File</label>
-            </div>
-            
-            <div class="preview-container" id="previewContainer">
-                <img id="preview" src="" alt="Uploaded X-ray Image">
-                <canvas id="canvas"></canvas>
-            </div>
-            
-            <button id="predictBtn" class="btn btn-success btn-predict" disabled>
-                <i class="fas fa-search"></i> Analyze X-ray
-            </button>
-            
-            <div class="loading" id="loading">
-                <div class="spinner"></div>
-                <p>Analyzing image, please wait...</p>
-            </div>
+<div class="container">
+    <header>
+        <div class="logo">
+            <i class="fas fa-lungs"></i>
+            <h1>Chest X-ray Abnormality Detection</h1>
+        </div>
+        <p class="subtitle">Upload a chest X-ray image to detect potential abnormalities using advanced AI analysis</p>
+    </header>
+
+    <div class="model-loading" id="modelLoading">
+        <i class="fas fa-spinner fa-spin"></i>
+        <span>Loading AI model, please wait...</span>
+    </div>
+    
+    <div class="card">
+        <h2 class="card-title"><i class="fas fa-upload"></i> Upload X-ray Image</h2>
+        <div class="upload-area" id="uploadArea">
+            <i class="fas fa-file-medical-alt"></i>
+            <p class="upload-text">Drag & drop your chest X-ray image here or click to browse</p>
+            <input type="file" id="imageUpload" accept="image/*" class="file-input">
+            <label for="imageUpload" class="file-label">Choose File</label>
         </div>
         
-        <div class="results-section">
-            <div class="detections-card">
-                <h2 class="card-title"><i class="fas fa-list"></i> Detected Abnormalities</h2>
-                <ul class="detections-list" id="detectionsList"></ul>
-            </div>
-            
-            <div class="stats-card">
-                <h2 class="card-title"><i class="fas fa-chart-bar"></i> Analysis Summary</h2>
-                <div class="stat">
-                    <span>Total Findings:</span>
-                    <span class="stat-value" id="totalFindings">0</span>
-                </div>
-                <div class="stat">
-                    <span>Highest Confidence:</span>
-                    <span class="stat-value" id="highestConfidence">0%</span>
-                </div>
-                <div class="stat">
-                    <span>Most Common:</span>
-                    <span class="stat-value" id="mostCommon">-</span>
-                </div>
-                
-                <button id="generateReportBtn" class="btn btn-primary" style="width: 100%; margin-top: 20px;" disabled>
-                    <i class="fas fa-file-medical"></i> Generate Report
-                </button>
-            </div>
+        <div class="preview-container" id="previewContainer">
+            <img id="preview" src="" alt="Uploaded X-ray Image">
+            <canvas id="canvas"></canvas>
         </div>
         
-        <!-- Report Generation Section -->
-        <div class="card report-section" id="reportSection">
-            <h2 class="card-title"><i class="fas fa-file-medical-alt"></i> Generate Radiology Report</h2>
-            
-            <div class="form-grid">
-                <div>
-                    <h3 class="card-title"><i class="fas fa-user"></i> Patient Information</h3>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Patient Name</label>
-                        <input type="text" class="form-input" id="patientName" placeholder="Full name">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Patient ID</label>
-                        <input type="text" class="form-input" id="patientId" placeholder="Medical record number">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Date of Birth</label>
-                        <input type="date" class="form-input" id="patientDob">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Gender</label>
-                        <select class="form-input" id="patientGender">
-                            <option value="">Select gender</option>
-                            <option value="male">Male</option>
-                            <option value="female">Female</option>
-                            <option value="other">Other</option>
-                        </select>
-                    </div>
-                </div>
-                
-                <div>
-                    <h3 class="card-title"><i class="fas fa-stethoscope"></i> Radiologist Information</h3>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Radiologist Name</label>
-                        <input type="text" class="form-input" id="radiologistName" placeholder="Full name">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">License Number</label>
-                        <input type="text" class="form-input" id="radiologistLicense" placeholder="Medical license number">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Signature</label>
-                        <input type="text" class="form-input" id="radiologistSignature" placeholder="Digital signature">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Additional Notes</label>
-                        <textarea class="form-input form-textarea" id="additionalNotes" placeholder="Clinical history or additional findings"></textarea>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="report-actions">
-                <button id="previewReportBtn" class="btn btn-primary">
-                    <i class="fas fa-eye"></i> Preview Report
-                </button>
-                <button id="resetReportBtn" class="btn">
-                    <i class="fas fa-redo"></i> Reset Form
-                </button>
-            </div>
-        </div>
+        <button id="predictBtn" class="btn btn-success btn-predict" disabled>
+            <i class="fas fa-search"></i> <span id="predictBtnText">Analyze X-ray</span>
+        </button>
         
-        <!-- Report Preview -->
-        <div class="report-preview" id="reportPreview">
-            <div class="report-header">
-                <div class="report-logo">
-                    <i class="fas fa-lungs" style="font-size: 2.5rem; color: var(--primary);"></i>
-                    <h1 class="report-title">Radiology Report</h1>
-                </div>
-                <p class="report-subtitle">Chest X-ray Analysis and Findings</p>
-            </div>
-            
-            <div class="report-patient-info">
-                <h3 class="report-section-title">Patient Information</h3>
-                <div class="info-grid">
-                    <div class="info-item">
-                        <div class="info-label">Name</div>
-                        <div class="info-value" id="reportPatientName">-</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Patient ID</div>
-                        <div class="info-value" id="reportPatientId">-</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Date of Birth</div>
-                        <div class="info-value" id="reportPatientDob">-</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Gender</div>
-                        <div class="info-value" id="reportPatientGender">-</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">Study Date</div>
-                        <div class="info-value" id="reportStudyDate">-</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="report-radiologist-info">
-                <h3 class="report-section-title">Radiologist Information</h3>
-                <div class="info-grid">
-                    <div class="info-item">
-                        <div class="info-label">Name</div>
-                        <div class="info-value" id="reportRadiologistName">-</div>
-                    </div>
-                    <div class="info-item">
-                        <div class="info-label">License Number</div>
-                        <div class="info-value" id="reportRadiologistLicense">-</div>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="report-findings">
-                <h3 class="report-section-title">Findings</h3>
-                <div id="reportFindings">
-                    <div class="no-detections">
-                        <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
-                        <p>No abnormalities detected.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div class="report-impression">
-                <h3 class="report-section-title">Impression</h3>
-                <p id="reportImpression">Based on the AI analysis of the chest X-ray, no significant abnormalities were detected. Clinical correlation is advised.</p>
-            </div>
-            
-            <div class="report-recommendation">
-                <h3 class="report-section-title">Recommendations</h3>
-                <p id="reportRecommendation">No further imaging is recommended at this time based on these findings. Follow-up as clinically indicated.</p>
-            </div>
-            
-            <div class="report-footer">
-                <div class="signature-area">
-                    <div class="signature-line"></div>
-                    <div class="signature-label" id="reportSignature">Radiologist Signature</div>
-                </div>
-                
-                <div class="action-buttons">
-                    <button id="printReportBtn" class="btn btn-primary">
-                        <i class="fas fa-print"></i> Print Report
-                    </button>
-                    <button id="downloadReportBtn" class="btn btn-success">
-                        <i class="fas fa-download"></i> Download PDF
-                    </button>
-                    <button id="closeReportBtn" class="btn">
-                        <i class="fas fa-times"></i> Close Preview
-                    </button>
-                </div>
-            </div>
+        <div class="analysis-loading" id="analysisLoading">
+            <i class="fas fa-spinner fa-spin"></i>
+            <span>Analyzing X-ray image, please wait...</span>
         </div>
     </div>
     
-    <footer>
-        <p>AI-powered chest X-ray analysis tool | DAS medhub | Beta Testing</p>
-    </footer>
+    <div class="results-section">
+        <div class="detections-card">
+            <h2 class="card-title"><i class="fas fa-list"></i> Detected Abnormalities</h2>
+            <ul class="detections-list" id="detectionsList"></ul>
+        </div>
+        
+        <div class="stats-card">
+            <h2 class="card-title"><i class="fas fa-chart-bar"></i> Analysis Summary</h2>
+            <div class="stat">
+                <span>Total Findings:</span>
+                <span class="stat-value" id="totalFindings">0</span>
+            </div>
+            <div class="stat">
+                <span>Highest Confidence:</span>
+                <span class="stat-value" id="highestConfidence">0%</span>
+            </div>
+            <div class="stat">
+                <span>Most Common:</span>
+                <span class="stat-value" id="mostCommon">-</span>
+            </div>
+            
+            <button id="generateReportBtn" class="btn btn-primary" style="width: 100%; margin-top: 20px;" disabled>
+                <i class="fas fa-file-medical"></i> Generate Report
+            </button>
+        </div>
+    </div>
+    
+    <div class="card report-section" id="reportSection">
+        <h2 class="card-title"><i class="fas fa-file-medical-alt"></i> Generate Radiology Report</h2>
+        
+        <div class="form-grid">
+            <div>
+                <h3 class="card-title"><i class="fas fa-user"></i> Patient Information</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">Patient Name</label>
+                    <input type="text" class="form-input" id="patientName" placeholder="Full name">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Patient ID</label>
+                    <input type="text" class="form-input" id="patientId" placeholder="Medical record number">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Date of Birth</label>
+                    <input type="date" class="form-input" id="patientDob">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Gender</label>
+                    <select class="form-input" id="patientGender">
+                        <option value="">Select gender</option>
+                        <option value="male">Male</option>
+                        <option value="female">Female</option>
+                        <option value="other">Other</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div>
+                <h3 class="card-title"><i class="fas fa-stethoscope"></i> Radiologist Information</h3>
+                
+                <div class="form-group">
+                    <label class="form-label">Radiologist Name</label>
+                    <input type="text" class="form-input" id="radiologistName" placeholder="Full name">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">License Number</label>
+                    <input type="text" class="form-input" id="radiologistLicense" placeholder="Medical license number">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Signature</label>
+                    <input type="text" class="form-input" id="radiologistSignature" placeholder="Digital signature">
+                </div>
+                
+                <div class="form-group">
+                    <label class="form-label">Additional Notes</label>
+                    <textarea class="form-input form-textarea" id="additionalNotes" placeholder="Clinical history or additional findings"></textarea>
+                </div>
+            </div>
+        </div>
+        
+        <div class="report-actions">
+            <button id="previewReportBtn" class="btn btn-primary">
+                <i class="fas fa-eye"></i> Preview Report
+            </button>
+            <button id="resetReportBtn" class="btn">
+                <i class="fas fa-redo"></i> Reset Form
+            </button>
+        </div>
+    </div>
+    
+    <div class="report-preview" id="reportPreview">
+        <div class="report-header">
+            <div class="report-logo">
+                <i class="fas fa-lungs" style="font-size: 2.5rem; color: var(--primary);"></i>
+                <h1 class="report-title">Radiology Report</h1>
+            </div>
+            <p class="report-subtitle">Chest X-ray Analysis and Findings</p>
+        </div>
+        
+        <div class="report-patient-info">
+            <h3 class="report-section-title">Patient Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Name</div>
+                    <div class="info-value" id="reportPatientName">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Patient ID</div>
+                    <div class="info-value" id="reportPatientId">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Date of Birth</div>
+                    <div class="info-value" id="reportPatientDob">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Gender</div>
+                    <div class="info-value" id="reportPatientGender">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Study Date</div>
+                    <div class="info-value" id="reportStudyDate">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="report-radiologist-info">
+            <h3 class="report-section-title">Radiologist Information</h3>
+            <div class="info-grid">
+                <div class="info-item">
+                    <div class="info-label">Name</div>
+                    <div class="info-value" id="reportRadiologistName">-</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">License Number</div>
+                    <div class="info-value" id="reportRadiologistLicense">-</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="report-findings">
+            <h3 class="report-section-title">Findings</h3>
+            <div id="reportFindings">
+                <div class="no-detections">
+                    <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                    <p>No abnormalities detected.</p>
+                </div>
+            </div>
+        </div>
+        
+        <div class="report-impression">
+            <h3 class="report-section-title">Impression</h3>
+            <p id="reportImpression">Based on the AI analysis of the chest X-ray, no significant abnormalities were detected. Clinical correlation is advised.</p>
+        </div>
+        
+        <div class="report-recommendation">
+            <h3 class="report-section-title">Recommendations</h3>
+            <p id="reportRecommendation">No further imaging is recommended at this time based on these findings. Follow-up as clinically indicated.</p>
+        </div>
+        
+        <div class="report-footer">
+            <div class="signature-area">
+                <div class="signature-line"></div>
+                <div class="signature-label" id="reportSignature">Radiologist Signature</div>
+            </div>
+            
+            <div class="action-buttons">
+                <button id="printReportBtn" class="btn btn-primary">
+                    <i class="fas fa-print"></i> Print Report
+                </button>
+                <button id="downloadReportBtn" class="btn btn-success">
+                    <i class="fas fa-download"></i> Download PDF
+                </button>
+                <button id="closeReportBtn" class="btn">
+                    <i class="fas fa-times"></i> Close Preview
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<footer>
+    <p>AI-powered chest X-ray analysis tool | DAS medhub | Beta Testing</p>
+</footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
@@ -771,7 +799,7 @@
     const abnormalityDescriptions = {
         'Aortic enlargement': 'The aortic knob appears prominent, suggesting possible aortic enlargement. This may indicate hypertension, aortic aneurysm, or other cardiovascular conditions. Further evaluation with echocardiography or CT angiography may be warranted.',
         'Atelectasis': 'There are signs of lung volume loss consistent with atelectasis. This could be due to mucus plugging, foreign body aspiration, or compression from mass effect. Clinical correlation is recommended.',
-        'Calcification': 'Calcified densities are noted, which may represent granulomatous disease, healed infection, or other chronic processes. Distribution and pattern should be correlated with clinical history.',
+        'Calcification': 'Calcified density are noted, which may represent granulomatous disease, healed infection, or other chronic processes. Distribution and pattern should be correlated with clinical history.',
         'Cardiomegaly': 'The cardiothoracic ratio appears increased, suggesting cardiomegaly. This may indicate congestive heart failure, cardiomyopathy, or other cardiac conditions. Echocardiogram may be beneficial for further evaluation.',
         'Consolidation': 'Airspace consolidation is present, which could represent pneumonia, aspiration, or other inflammatory processes. Correlation with clinical symptoms and laboratory findings is advised.',
         'ILD': 'Findings are suggestive of interstitial lung disease, with reticular or nodular patterns noted. This may represent fibrosis, inflammation, or other interstitial processes. HRCT may provide better characterization.',
@@ -791,7 +819,6 @@
         'Pleural effusion', 'Pleural thickening', 'Pneumothorax', 'Pulmonary fibrosis'
     ];
 
-    // Assign unique colors per class
     const classColors = {};
     classNames.forEach((cls, i) => {
         const hue = (i * 40) % 360;
@@ -801,7 +828,10 @@
     const imgSize = 640;
     const confThreshold = 0.25;
     const iouThreshold = 0.3;
-    const modelPath = 'chest(14).onnx'; 
+    const modelPath = 'https://huggingface.co/Sebukpor/chest-expert/resolve/main/chest.onnx'; 
+    const modelCacheKey = 'chest_xray_model';
+    const modelCacheDB = 'ModelCache';
+    const modelCacheStore = 'models';
 
     let session = null;
     let originalWidth = 0;
@@ -814,15 +844,106 @@
     let currentDetections = [];
     let currentImageDataURL = null;
 
-    async function loadModel() {
+    // IndexedDB setup
+    function openDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(modelCacheDB, 1);
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                db.createObjectStore(modelCacheStore, { keyPath: 'id' });
+            };
+            request.onsuccess = (event) => resolve(event.target.result);
+            request.onerror = (event) => reject(event.target.error);
+        });
+    }
+
+    async function saveModelToCache(modelData) {
         try {
-            session = await ort.InferenceSession.create(modelPath);
-            console.log('Model loaded successfully');
+            const db = await openDB();
+            const tx = db.transaction([modelCacheStore], 'readwrite');
+            const store = tx.objectStore(modelCacheStore);
+            await new Promise((resolve, reject) => {
+                const request = store.put({ id: modelCacheKey, data: modelData });
+                request.onsuccess = resolve;
+                request.onerror = reject;
+            });
+            console.log('Model cached successfully');
         } catch (error) {
-            console.error('Error loading model:', error);
-            alert('Failed to load the model. Please check console.');
+            console.error('Error caching model:', error);
         }
     }
+
+    async function getCachedModel() {
+        try {
+            const db = await openDB();
+            const tx = db.transaction([modelCacheStore], 'readonly');
+            const store = tx.objectStore(modelCacheStore);
+            const request = await new Promise((resolve, reject) => {
+                const req = store.get(modelCacheKey);
+                req.onsuccess = () => resolve(req.result);
+                req.onerror = reject;
+            });
+            return request ? request.data : null;
+        } catch (error) {
+            console.error('Error retrieving cached model:', error);
+            return null;
+        }
+    }
+
+    async function loadModel() {
+        const modelLoading = document.getElementById('modelLoading');
+        modelLoading.classList.add('active');
+        try {
+            // Check for cached model
+            const cachedModel = await getCachedModel();
+            if (cachedModel) {
+                session = await ort.InferenceSession.create(cachedModel);
+                console.log('Model loaded from cache');
+                modelLoading.classList.add('success');
+                modelLoading.innerHTML = `
+                    <i class="fas fa-check-circle"></i>
+                    <span>AI model loaded from cache!</span>
+                `;
+                setTimeout(() => {
+                    modelLoading.classList.remove('active');
+                }, 2000);
+                return;
+            }
+
+            // Fetch and cache model if not found in cache
+            const response = await fetch(modelPath);
+            if (!response.ok) {
+                throw new Error(`Failed to fetch model: ${response.statusText}`);
+            }
+            const modelData = await response.arrayBuffer();
+            session = await ort.InferenceSession.create(modelData);
+            
+            // Cache the model
+            await saveModelToCache(modelData);
+            
+            console.log('Model loaded and cached successfully');
+            modelLoading.classList.add('success');
+            modelLoading.innerHTML = `
+                <i class="fas fa-check-circle"></i>
+                <span>AI model loaded successfully!</span>
+            `;
+            setTimeout(() => {
+                modelLoading.classList.remove('active');
+            }, 2000);
+        } catch (error) {
+            console.error('Error loading model:', error);
+            modelLoading.classList.add('error');
+            modelLoading.innerHTML = `
+                <i class="fas fa-exclamation-circle"></i>
+                <span>Failed to load AI model: ${error.message}. Please refresh the page.</span>
+            `;
+            setTimeout(() => {
+                modelLoading.classList.remove('active');
+            }, 3000);
+        }
+    }
+
+    // Initialize model loading
     loadModel();
 
     const imageUpload = document.getElementById('imageUpload');
@@ -830,11 +951,12 @@
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
     const predictBtn = document.getElementById('predictBtn');
+    const predictBtnText = document.getElementById('predictBtnText');
     const generateReportBtn = document.getElementById('generateReportBtn');
     const detectionsList = document.getElementById('detectionsList');
     const uploadArea = document.getElementById('uploadArea');
     const previewContainer = document.getElementById('previewContainer');
-    const loading = document.getElementById('loading');
+    const analysisLoading = document.getElementById('analysisLoading');
     const totalFindings = document.getElementById('totalFindings');
     const highestConfidence = document.getElementById('highestConfidence');
     const mostCommon = document.getElementById('mostCommon');
@@ -874,44 +996,59 @@
     });
 
     function handleFileUpload(file) {
-        if (file) {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                preview.src = event.target.result;
-                currentImageDataURL = event.target.result;
-                preview.onload = () => {
-                    originalWidth = preview.naturalWidth;
-                    originalHeight = preview.naturalHeight;
-                    canvas.width = preview.width;
-                    canvas.height = preview.height;
-                    displayRatioX = preview.width / originalWidth;
-                    displayRatioY = preview.height / originalHeight;
-                    predictBtn.disabled = false;
-                    
-                    // Show preview container
-                    previewContainer.style.display = 'block';
-                };
-            };
-            reader.readAsDataURL(file);
+        if (!file.type.startsWith('image/')) {
+            alert('Please upload a valid image file.');
+            return;
         }
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            preview.src = event.target.result;
+            currentImageDataURL = event.target.result;
+            preview.onload = () => {
+                originalWidth = preview.naturalWidth;
+                originalHeight = preview.naturalHeight;
+                canvas.width = preview.width;
+                canvas.height = preview.height;
+                displayRatioX = preview.width / originalWidth;
+                displayRatioY = preview.height / originalHeight;
+                predictBtn.disabled = !session;
+                previewContainer.style.display = 'block';
+                analysisLoading.classList.remove('active', 'success', 'error');
+                analysisLoading.innerHTML = `
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Analyzing X-ray image, please wait...</span>
+                `;
+            };
+            reader.onerror = () => {
+                alert('Error reading the image file. Please try again.');
+            };
+        };
+        reader.readAsDataURL(file);
     }
 
     imageUpload.addEventListener('change', (e) => {
         const file = e.target.files[0];
-        handleFileUpload(file);
+        if (file) handleFileUpload(file);
     });
 
     predictBtn.addEventListener('click', async () => {
         if (!session) {
-            alert('Model is not loaded yet. Please wait.');
+            alert('Model is still loading. Please wait and try again.');
             return;
         }
-        predictBtn.disabled = true;
-        loading.style.display = 'block';
-        detectionsList.innerHTML = '';
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-
+        
         try {
+            // Update UI for analyzing state
+            predictBtn.disabled = true;
+            predictBtnText.textContent = 'Analyzing...';
+            predictBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> <span id="predictBtnText">Analyzing...</span>`;
+            analysisLoading.classList.add('active');
+            detectionsList.innerHTML = '';
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Ensure spinner is visible for at least 1 second for UX
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
             const inputTensor = await preprocessImage(preview);
             const feeds = { images: inputTensor };
             const outputMap = await session.run(feeds);
@@ -920,25 +1057,46 @@
             drawDetections(currentDetections);
             updateStats(currentDetections);
             
-            // Enable report generation if we have findings
             generateReportBtn.disabled = currentDetections.length === 0;
+            analysisLoading.classList.add('success');
+            analysisLoading.innerHTML = `
+                <i class="fas fa-check-circle"></i>
+                <span>Analysis completed successfully!</span>
+            `;
+            setTimeout(() => {
+                analysisLoading.classList.remove('active', 'success');
+                analysisLoading.innerHTML = `
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Analyzing X-ray image, please wait...</span>
+                `;
+            }, 2000);
         } catch (error) {
             console.error('Error during prediction:', error);
-            alert('An error occurred during prediction. Check the console.');
+            analysisLoading.classList.add('error');
+            analysisLoading.innerHTML = `
+                <i class="fas fa-exclamation-circle"></i>
+                <span>Analysis failed: ${error.message}. Please try again.</span>
+            `;
+            setTimeout(() => {
+                analysisLoading.classList.remove('active', 'error');
+                analysisLoading.innerHTML = `
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Analyzing X-ray image, please wait...</span>
+                `;
+            }, 3000);
+            alert(`An error occurred during analysis: ${error.message}. Please try again.`);
         } finally {
-            predictBtn.disabled = false;
-            loading.style.display = 'none';
+            predictBtn.disabled = !session;
+            predictBtn.innerHTML = `<i class="fas fa-search"></i> <span id="predictBtnText">Analyze X-ray</span>`;
         }
     });
 
     generateReportBtn.addEventListener('click', () => {
         reportSection.style.display = 'block';
-        // Scroll to report section
         reportSection.scrollIntoView({ behavior: 'smooth' });
     });
 
     previewReportBtn.addEventListener('click', () => {
-        // Populate report preview with form data
         document.getElementById('reportPatientName').textContent = document.getElementById('patientName').value || 'Not provided';
         document.getElementById('reportPatientId').textContent = document.getElementById('patientId').value || 'Not provided';
         document.getElementById('reportPatientDob').textContent = document.getElementById('patientDob').value || 'Not provided';
@@ -947,11 +1105,9 @@
         document.getElementById('reportRadiologistLicense').textContent = document.getElementById('radiologistLicense').value || 'Not provided';
         document.getElementById('reportSignature').textContent = document.getElementById('radiologistSignature').value || 'Radiologist Signature';
         
-        // Set current date
         const now = new Date();
         document.getElementById('reportStudyDate').textContent = now.toLocaleDateString();
         
-        // Generate findings content
         const findingsContainer = document.getElementById('reportFindings');
         findingsContainer.innerHTML = '';
         
@@ -972,7 +1128,6 @@
                 findingsContainer.appendChild(findingElement);
             });
             
-            // Update impression and recommendation based on findings
             document.getElementById('reportImpression').textContent = 
                 `The chest X-ray demonstrates ${currentDetections.length} abnormality(ies) as detailed above. Clinical correlation is advised.`;
             
@@ -987,15 +1142,11 @@
             `;
         }
         
-        // Show the report preview
         reportPreview.style.display = 'block';
-        
-        // Scroll to report preview
         reportPreview.scrollIntoView({ behavior: 'smooth' });
     });
 
     resetReportBtn.addEventListener('click', () => {
-        // Clear all form fields
         document.getElementById('patientName').value = '';
         document.getElementById('patientId').value = '';
         document.getElementById('patientDob').value = '';
@@ -1018,13 +1169,11 @@
         tempCanvas.height = originalHeight;
         const tempCtx = tempCanvas.getContext('2d');
 
-        // Draw the original image
         const fullImg = new Image();
         fullImg.src = currentImageDataURL;
         await new Promise(resolve => { fullImg.onload = resolve; });
         tempCtx.drawImage(fullImg, 0, 0, originalWidth, originalHeight);
 
-        // Draw detections
         tempCtx.lineWidth = 4;
         const fontSize = Math.max(16, originalWidth / 50);
         tempCtx.font = `bold ${fontSize}px Arial`;
@@ -1064,218 +1213,186 @@
         return tempCanvas.toDataURL('image/jpeg', 0.95);
     }
 
-  downloadReportBtn.addEventListener('click', async () => {
-    try {
-        // Check if jsPDF is available
-        if (typeof window.jspdf === 'undefined') {
-            throw new Error('PDF library not loaded. Please refresh the page and try again.');
-        }
-        
-        const { jsPDF } = window.jspdf;
-        const doc = new jsPDF();
-        
-        // Show loading state
-        downloadReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
-        downloadReportBtn.disabled = true;
-        
-        // Add DAS MedHub branding
-        doc.setFontSize(16);
-        doc.setFont('helvetica', 'bold');
-        doc.setTextColor(40, 53, 147);
-        doc.text('DAS medhub Chest X-ray Report', 105, 15, { align: 'center' });
-        
-        // Add smaller tagline
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'italic');
-        doc.setTextColor(100, 100, 100);
-        doc.text('AI-Powered Diagnostic Assistance System - Beta', 105, 22, { align: 'center' });
-        
-        // Reset text color
-        doc.setTextColor(0, 0, 0);
-        
-        // Add the X-ray image if available
-        let yPos = 30; // Initial Y position
-        
-        if (currentImageDataURL && originalWidth && originalHeight) {
-            try {
-                const annotatedURL = await getAnnotatedImageDataURL();
-
-                // Add image title
-                doc.setFontSize(12);
-                doc.setFont('helvetica', 'bold');
-                doc.text('Chest X-ray Image:', 20, yPos);
-                yPos += 10;
-                
-                // Add the image with a fixed size
-                const width = 80;
-                const height = (originalHeight * width) / originalWidth;
-                
-                doc.addImage(annotatedURL, 'JPEG', 20, yPos, width, height);
-                
-                // Add border around image
-                doc.rect(19, yPos - 1, width + 2, height + 2);
-                
-                yPos += height + 20;
-            } catch (error) {
-                console.error('Error adding image to PDF:', error);
-                // Continue without the image
-                doc.text('Image not available for PDF export', 20, yPos);
-                yPos += 10;
+    downloadReportBtn.addEventListener('click', async () => {
+        try {
+            if (typeof window.jspdf === 'undefined') {
+                throw new Error('PDF library not loaded. Please refresh the page and try again.');
             }
-        }
-        
-        // Patient Information
-        doc.setFontSize(12);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Patient Information:', 20, yPos);
-        yPos += 10;
-        
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Name: ${document.getElementById('reportPatientName').textContent}`, 20, yPos);
-        yPos += 10;
-        doc.text(`ID: ${document.getElementById('reportPatientId').textContent}`, 20, yPos);
-        yPos += 10;
-        doc.text(`DOB: ${document.getElementById('reportPatientDob').textContent}`, 20, yPos);
-        yPos += 10;
-        doc.text(`Gender: ${document.getElementById('reportPatientGender').textContent}`, 20, yPos);
-        yPos += 20;
-        
-        // Study Information
-        doc.setFont('helvetica', 'bold');
-        doc.text('Study Information:', 20, yPos);
-        yPos += 10;
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Study Date: ${document.getElementById('reportStudyDate').textContent}`, 20, yPos);
-        yPos += 20;
-        
-        // Findings
-        doc.setFont('helvetica', 'bold');
-        doc.text('Findings:', 20, yPos);
-        yPos += 10;
-        
-        if (currentDetections.length > 0) {
-            doc.setFont('helvetica', 'normal');
-            currentDetections.forEach(det => {
-                const className = classNames[det.classId];
-                const confidence = Math.round(det.score * 100);
-                
-                // Check if we need a new page
-                if (yPos > 250) {
-                    doc.addPage();
-                    yPos = 20;
+            
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            
+            downloadReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+            downloadReportBtn.disabled = true;
+            
+            doc.setFontSize(16);
+            doc.setFont('helvetica', 'bold');
+            doc.setTextColor(40, 53, 147);
+            doc.text('DAS medhub Chest X-ray Report', 105, 15, { align: 'center' });
+            
+            doc.setFontSize(10);
+            doc.setFont('helvetica', 'italic');
+            doc.setTextColor(100, 100, 100);
+            doc.text('AI-Powered Diagnostic Assistance System - Beta', 105, 22, { align: 'center' });
+            
+            doc.setTextColor(0, 0, 0);
+            
+            let yPos = 30;
+            
+            if (currentImageDataURL && originalWidth && originalHeight) {
+                try {
+                    const annotatedURL = await getAnnotatedImageDataURL();
+                    doc.setFontSize(12);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text('Chest X-ray Image:', 20, yPos);
+                    yPos += 10;
+                    
+                    const width = 80;
+                    const height = (originalHeight * width) / originalWidth;
+                    doc.addImage(annotatedURL, 'JPEG', 20, yPos, width, height);
+                    doc.rect(19, yPos - 1, width + 2, height + 2);
+                    yPos += height + 20;
+                } catch (error) {
+                    console.error('Error adding image to PDF:', error);
+                    doc.text('Image not available for PDF export', 20, yPos);
+                    yPos += 10;
                 }
-                
-                doc.setFont('helvetica', 'bold');
-                doc.setTextColor(40, 53, 147);
-                doc.text(`${className} (Confidence: ${confidence}%)`, 20, yPos);
-                yPos += 10;
-                
-                doc.setFont('helvetica', 'normal');
-                doc.setTextColor(0, 0, 0);
-                const description = abnormalityDescriptions[className] || 'No specific description available.';
-                const splitDesc = doc.splitTextToSize(description, 170);
-                doc.text(splitDesc, 20, yPos);
-                yPos += (splitDesc.length * 6) + 10;
-            });
-        } else {
+            }
+            
+            doc.setFontSize(12);
+            doc.setFont('helvetica', 'bold');
+            doc.text('Patient Information:', 20, yPos);
+            yPos += 10;
+            
             doc.setFont('helvetica', 'normal');
-            doc.text('No abnormalities detected.', 20, yPos);
-            yPos += 15;
-        }
-        
-        // Check if we need a new page for the next section
-        if (yPos > 220) {
-            doc.addPage();
-            yPos = 20;
-        }
-        
-        // Impression
-        doc.setFont('helvetica', 'bold');
-        doc.text('Impression:', 20, yPos);
-        yPos += 10;
-        doc.setFont('helvetica', 'normal');
-        const impression = document.getElementById('reportImpression').textContent;
-        const splitImpression = doc.splitTextToSize(impression, 170);
-        doc.text(splitImpression, 20, yPos);
-        yPos += (splitImpression.length * 6) + 15;
-        
-        // Check if we need a new page for the next section
-        if (yPos > 220) {
-            doc.addPage();
-            yPos = 20;
-        }
-        
-        // Recommendation
-        doc.setFont('helvetica', 'bold');
-        doc.text('Recommendation:', 20, yPos);
-        yPos += 10;
-        doc.setFont('helvetica', 'normal');
-        const recommendation = document.getElementById('reportRecommendation').textContent;
-        const splitRecommendation = doc.splitTextToSize(recommendation, 170);
-        doc.text(splitRecommendation, 20, yPos);
-        yPos += (splitRecommendation.length * 6) + 15;
-        
-        // Additional Notes
-        const additionalNotes = document.getElementById('additionalNotes').value;
-        if (additionalNotes) {
-            // Check if we need a new page for the next section
+            doc.text(`Name: ${document.getElementById('reportPatientName').textContent}`, 20, yPos);
+            yPos += 10;
+            doc.text(`ID: ${document.getElementById('reportPatientId').textContent}`, 20, yPos);
+            yPos += 10;
+            doc.text(`DOB: ${document.getElementById('reportPatientDob').textContent}`, 20, yPos);
+            yPos += 10;
+            doc.text(`Gender: ${document.getElementById('reportPatientGender').textContent}`, 20, yPos);
+            yPos += 20;
+            
+            doc.setFont('helvetica', 'bold');
+            doc.text('Study Information:', 20, yPos);
+            yPos += 10;
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Study Date: ${document.getElementById('reportStudyDate').textContent}`, 20, yPos);
+            yPos += 20;
+            
+            doc.setFont('helvetica', 'bold');
+            doc.text('Findings:', 20, yPos);
+            yPos += 10;
+            
+            if (currentDetections.length > 0) {
+                doc.setFont('helvetica', 'normal');
+                currentDetections.forEach(det => {
+                    const className = classNames[det.classId];
+                    const confidence = Math.round(det.score * 100);
+                    
+                    if (yPos > 250) {
+                        doc.addPage();
+                        yPos = 20;
+                    }
+                    
+                    doc.setFont('helvetica', 'bold');
+                    doc.setTextColor(40, 53, 147);
+                    doc.text(`${className} (Confidence: ${confidence}%)`, 20, yPos);
+                    yPos += 10;
+                    
+                    doc.setFont('helvetica', 'normal');
+                    doc.setTextColor(0, 0, 0);
+                    const description = abnormalityDescriptions[className] || 'No specific description available.';
+                    const splitDesc = doc.splitTextToSize(description, 170);
+                    doc.text(splitDesc, 20, yPos);
+                    yPos += (splitDesc.length * 6) + 10;
+                });
+            } else {
+                doc.setFont('helvetica', 'normal');
+                doc.text('No abnormalities detected.', 20, yPos);
+                yPos += 15;
+            }
+            
             if (yPos > 220) {
                 doc.addPage();
                 yPos = 20;
             }
             
             doc.setFont('helvetica', 'bold');
-            doc.text('Additional Notes:', 20, yPos);
+            doc.text('Impression:', 20, yPos);
             yPos += 10;
             doc.setFont('helvetica', 'normal');
-            const splitNotes = doc.splitTextToSize(additionalNotes, 170);
-            doc.text(splitNotes, 20, yPos);
-            yPos += (splitNotes.length * 6) + 15;
+            const impression = document.getElementById('reportImpression').textContent;
+            const splitImpression = doc.splitTextToSize(impression, 170);
+            doc.text(splitImpression, 20, yPos);
+            yPos += (splitImpression.length * 6) + 15;
+            
+            if (yPos > 220) {
+                doc.addPage();
+                yPos = 20;
+            }
+            
+            doc.setFont('helvetica', 'bold');
+            doc.text('Recommendation:', 20, yPos);
+            yPos += 10;
+            doc.setFont('helvetica', 'normal');
+            const recommendation = document.getElementById('reportRecommendation').textContent;
+            const splitRecommendation = doc.splitTextToSize(recommendation, 170);
+            doc.text(splitRecommendation, 20, yPos);
+            yPos += (splitRecommendation.length * 6) + 15;
+            
+            const additionalNotes = document.getElementById('additionalNotes').value;
+            if (additionalNotes) {
+                if (yPos > 220) {
+                    doc.addPage();
+                    yPos = 20;
+                }
+                
+                doc.setFont('helvetica', 'bold');
+                doc.text('Additional Notes:', 20, yPos);
+                yPos += 10;
+                doc.setFont('helvetica', 'normal');
+                const splitNotes = doc.splitTextToSize(additionalNotes, 170);
+                doc.text(splitNotes, 20, yPos);
+                yPos += (splitNotes.length * 6) + 15;
+            }
+            
+            if (yPos > 220) {
+                doc.addPage();
+                yPos = 20;
+            }
+            
+            doc.setFont('helvetica', 'bold');
+            doc.text('Radiologist:', 20, yPos);
+            yPos += 10;
+            doc.setFont('helvetica', 'normal');
+            doc.text(`Name: ${document.getElementById('reportRadiologistName').textContent}`, 20, yPos);
+            yPos += 10;
+            doc.text(`License: ${document.getElementById('reportRadiologistLicense').textContent}`, 20, yPos);
+            yPos += 10;
+            doc.text(`Signature: ${document.getElementById('reportSignature').textContent}`, 20, yPos);
+            yPos += 15;
+            
+            const pageCount = doc.internal.getNumberOfPages();
+            for (let i = 1; i <= pageCount; i++) {
+                doc.setPage(i);
+                doc.setFontSize(10);
+                doc.setTextColor(100, 100, 100);
+                doc.text('Powered by DAS medhub AI Diagnostics', 105, 285, { align: 'center' });
+                doc.text(`Page ${i} of ${pageCount}`, 105, 290, { align: 'center' });
+            }
+            
+            doc.save('DAS_medhub_Chest_Xray_Report.pdf');
+            alert('PDF report downloaded successfully!');
+        } catch (error) {
+            console.error('Error generating PDF:', error);
+            alert(`Error generating PDF: ${error.message}. Please try again.`);
+        } finally {
+            downloadReportBtn.innerHTML = '<i class="fas fa-download"></i> Download as PDF';
+            downloadReportBtn.disabled = false;
         }
-        
-        // Check if we need a new page for the next section
-        if (yPos > 220) {
-            doc.addPage();
-            yPos = 20;
-        }
-        
-        // Radiologist Information
-        doc.setFont('helvetica', 'bold');
-        doc.text('Radiologist:', 20, yPos);
-        yPos += 10;
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Name: ${document.getElementById('reportRadiologistName').textContent}`, 20, yPos);
-        yPos += 10;
-        doc.text(`License: ${document.getElementById('reportRadiologistLicense').textContent}`, 20, yPos);
-        yPos += 10;
-        doc.text(`Signature: ${document.getElementById('reportSignature').textContent}`, 20, yPos);
-        yPos += 15;
-        
-        // Add footer with DAS MedHub branding
-        const pageCount = doc.internal.getNumberOfPages();
-        for (let i = 1; i <= pageCount; i++) {
-            doc.setPage(i);
-            doc.setFontSize(10);
-            doc.setTextColor(100, 100, 100);
-            doc.text('Powered by DAS medHub AI Diagnostics', 105, 285, { align: 'center' });
-            doc.text(`Page ${i} of ${pageCount}`, 105, 290, { align: 'center' });
-        }
-        
-        // Save the PDF
-        doc.save('DAS_medhub_Chest_Xray_Report.pdf');
-        
-        // Show success message
-        alert('PDF report downloaded successfully!');
-        
-    } catch (error) {
-        console.error('Error generating PDF:', error);
-        alert(`Error generating PDF: ${error.message}. Please try again.`);
-    } finally {
-        // Reset button state
-        downloadReportBtn.innerHTML = '<i class="fas fa-download"></i> Download as PDF';
-        downloadReportBtn.disabled = false;
-    }
-});
+    });
 
     closeReportBtn.addEventListener('click', () => {
         reportPreview.style.display = 'none';
