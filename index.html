@@ -1227,6 +1227,12 @@
             `;
         }
         
+        // Hide the logo in the preview
+        const logoElement = document.querySelector('.report-logo');
+        if (logoElement) {
+            logoElement.style.display = 'none';
+        }
+        
         reportPreview.style.display = 'block';
         reportPreview.scrollIntoView({ behavior: 'smooth' });
     });
@@ -1240,9 +1246,19 @@
         document.getElementById('radiologistLicense').value = '';
         document.getElementById('radiologistSignature').value = '';
         document.getElementById('additionalNotes').value = '';
+        // Restore logo visibility when resetting
+        const logoElement = document.querySelector('.report-logo');
+        if (logoElement) {
+            logoElement.style.display = 'flex';
+        }
     });
 
     printReportBtn.addEventListener('click', () => {
+        // Ensure logo is visible for printing
+        const logoElement = document.querySelector('.report-logo');
+        if (logoElement) {
+            logoElement.style.display = 'flex';
+        }
         window.print();
     });
 
@@ -1300,7 +1316,6 @@
             // Header Details (Two Columns)
             doc.setFont('times', 'bold');
             doc.setFontSize(12);
-            doc.setTextColor(0, 0, 0);
             doc.text('Patient Information:', margin, yPos);
             doc.text('Study Information:', margin + columnWidth + gap, yPos);
             yPos += 10;
@@ -1355,8 +1370,6 @@
                     let imgHeight = imgWidth * imgRatio;
                     if (imgHeight > maxImgHeight) {
                         imgHeight = maxImgHeight;
-                        // Adjust width to maintain aspect ratio
-                        // imgWidth = imgHeight / imgRatio;
                     }
                     const splitDesc = doc.splitTextToSize(description, columnWidth);
                     const descHeight = splitDesc.length * 7; // Approx 7mm per line
@@ -1523,6 +1536,11 @@
 
     closeReportBtn.addEventListener('click', () => {
         reportPreview.style.display = 'none';
+        // Restore logo visibility when closing
+        const logoElement = document.querySelector('.report-logo');
+        if (logoElement) {
+            logoElement.style.display = 'flex';
+        }
     });
 
     async function preprocessImage(img) {
