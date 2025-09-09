@@ -1058,7 +1058,6 @@
             </div>
             <div class="right-column">
                 <h3 class="report-section-title">Study Information</h3>
-
 <div class="info-item">
     <div class="info-label">Facility</div>
     <div class="info-value" id="reportFacilityDisplay">-</div>
@@ -1125,16 +1124,14 @@
 </footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
-    // Google Gemini API Configuration
-  const GEMINI_API_KEY = "AIzaSyDRjeYTZYKboOKUhScBtnjQgFrAXVE60IQ";
-  const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`;
-
-    // Enhanced System instruction for Gemini model to act as a certified radiologist WITH AGE CONTEXT
-  const SYSTEM_INSTRUCTION = `
+// Google Gemini API Configuration
+const GEMINI_API_KEY = "AIzaSyDRjeYTZYKboOKUhScBtnjQgFrAXVE60IQ";
+const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${GEMINI_API_KEY}`;
+// Enhanced System instruction for Gemini model to act as a certified radiologist WITH AGE CONTEXT
+const SYSTEM_INSTRUCTION = `
 You are a board-certified radiologist with more than 25 years of experience in thoracic imaging and chest X-ray interpretation. 
 You are recognized by the American College of Radiology (ACR) and the Radiological Society of North America (RSNA) for your expertise. 
 Your task is to provide precise, evidence-based interpretations of chest radiographs, following ACR guidelines and RSNA standards.
-
 CRITICAL REQUIREMENT:
 - You MUST incorporate the patient’s demographics (age and gender) into every interpretation.
 - Always contextualize findings based on age-related normal variants and demographic expectations. 
@@ -1144,7 +1141,6 @@ CRITICAL REQUIREMENT:
   • Pulmonary opacities, nodules, or consolidations may have different significance in pediatric vs. geriatric patients.
 - Explicitly state when a finding is likely a benign age-related variant versus a clinically concerning abnormality.
 - Adjust your differential diagnoses and recommendations according to the patient’s demographic group (pediatric, adult, geriatric, male vs. female).
-
 KEY PRINCIPLES FOR ANALYSIS:
 1. Use standard radiological terminology (opacity, consolidation, effusion, fibrosis, atelectasis, mass, etc.).
 2. Assume a standard PA chest X-ray unless otherwise specified, but implicitly consider technical factors.
@@ -1159,237 +1155,245 @@ KEY PRINCIPLES FOR ANALYSIS:
 8. For normal studies: explicitly state normal findings (cardiac silhouette, lung fields, mediastinum, bones) and reinforce that the study is within normal limits for the patient’s demographics.
 9. Impression: Provide a concise summary highlighting the most clinically significant findings, explaining how demographics influence interpretation.
 10. Recommendations: Suggest appropriate follow-up steps (e.g., CT, HRCT, MRI, PET-CT, biopsy, specialist referral) with urgency prioritized by patient age, clinical risk, and suspected pathology.
-
 STYLE AND TONE:
 - Maintain a professional, objective, and authoritative radiology report style.
 - Interpret model-provided detections holistically; group, refine, or re-prioritize them as an expert radiologist would.
 - Never hallucinate unsupported findings. Base conclusions strictly on the provided inputs.
 - Structure responses clearly into sections: Findings, Impression, Recommendations.
-
 Your responses should reflect the reasoning and communication style of a radiologist with over 25 years of clinical experience, ensuring accuracy, safety, and alignment with ACR/RSNA guidelines.
 `;
-    const classNames = [
-        'Aortic enlargement', 'Atelectasis', 'Calcification', 'Cardiomegaly', 'Consolidation',
-        'ILD', 'Infiltration', 'Lung Opacity', 'Nodule/Mass', 'Other lesion',
-        'Pleural effusion', 'Pleural thickening', 'Pneumothorax', 'Pulmonary fibrosis'
-    ];
-    const classColors = {};
-    classNames.forEach((cls, i) => {
-        const hue = (i * 40) % 360;
-        classColors[cls] = `hsl(${hue}, 80%, 50%)`;
+const classNames = [
+    'Aortic enlargement', 'Atelectasis', 'Calcification', 'Cardiomegaly', 'Consolidation',
+    'ILD', 'Infiltration', 'Lung Opacity', 'Nodule/Mass', 'Other lesion',
+    'Pleural effusion', 'Pleural thickening', 'Pneumothorax', 'Pulmonary fibrosis'
+];
+const classColors = {};
+classNames.forEach((cls, i) => {
+    const hue = (i * 40) % 360;
+    classColors[cls] = `hsl(${hue}, 80%, 50%)`;
+});
+const imgSize = 640;
+const confThreshold = 0.25;
+const iouThreshold = 0.3;
+const modelPath = 'https://huggingface.co/Sebukpor/chest-expert/resolve/main/chest.onnx';
+const modelCacheKey = 'chest_xray_model';
+const modelCacheDB = 'ModelCache';
+const modelCacheStore = 'models';
+let session = null;
+let originalWidth = 0;
+let originalHeight = 0;
+let displayRatioX = 1;
+let displayRatioY = 1;
+let scaleFactor = 1;
+let padLeft = 0;
+let padTop = 0;
+let currentDetections = [];
+let currentImageDataURL = null;
+let aiAnalysisResult = null;
+let patientDemographics = {
+    name: '',
+    age: null,
+    gender: '',
+    dob: '',
+    id: ''
+};
+// IndexedDB setup
+function openDB() {
+    return new Promise((resolve, reject) => {
+        const request = indexedDB.open(modelCacheDB, 1);
+        request.onupgradeneeded = (event) => {
+            const db = event.target.result;
+            db.createObjectStore(modelCacheStore, { keyPath: 'id' });
+        };
+        request.onsuccess = (event) => resolve(event.target.result);
+        request.onerror = (event) => reject(event.target.error);
     });
-    const imgSize = 640;
-    const confThreshold = 0.25;
-    const iouThreshold = 0.3;
-    const modelPath = 'https://huggingface.co/Sebukpor/chest-expert/resolve/main/chest.onnx';
-    const modelCacheKey = 'chest_xray_model';
-    const modelCacheDB = 'ModelCache';
-    const modelCacheStore = 'models';
-    let session = null;
-    let originalWidth = 0;
-    let originalHeight = 0;
-    let displayRatioX = 1;
-    let displayRatioY = 1;
-    let scaleFactor = 1;
-    let padLeft = 0;
-    let padTop = 0;
-    let currentDetections = [];
-    let currentImageDataURL = null;
-    let aiAnalysisResult = null; // Store the AI analysis result
-    let patientDemographics = {
-        name: '',
-        age: null,
-        gender: '',
-        dob: '',
-        id: ''
-    };
-    // IndexedDB setup
-    function openDB() {
-        return new Promise((resolve, reject) => {
-            const request = indexedDB.open(modelCacheDB, 1);
-            request.onupgradeneeded = (event) => {
-                const db = event.target.result;
-                db.createObjectStore(modelCacheStore, { keyPath: 'id' });
-            };
-            request.onsuccess = (event) => resolve(event.target.result);
-            request.onerror = (event) => reject(event.target.error);
+}
+async function saveModelToCache(modelData) {
+    try {
+        const db = await openDB();
+        const tx = db.transaction([modelCacheStore], 'readwrite');
+        const store = tx.objectStore(modelCacheStore);
+        await new Promise((resolve, reject) => {
+            const request = store.put({ id: modelCacheKey, data: modelData });
+            request.onsuccess = resolve;
+            request.onerror = reject;
         });
+        console.log('Model cached successfully');
+    } catch (error) {
+        console.error('Error caching model:', error);
     }
-    async function saveModelToCache(modelData) {
-        try {
-            const db = await openDB();
-            const tx = db.transaction([modelCacheStore], 'readwrite');
-            const store = tx.objectStore(modelCacheStore);
-            await new Promise((resolve, reject) => {
-                const request = store.put({ id: modelCacheKey, data: modelData });
-                request.onsuccess = resolve;
-                request.onerror = reject;
-            });
-            console.log('Model cached successfully');
-        } catch (error) {
-            console.error('Error caching model:', error);
-        }
+}
+async function getCachedModel() {
+    try {
+        const db = await openDB();
+        const tx = db.transaction([modelCacheStore], 'readonly');
+        const store = tx.objectStore(modelCacheStore);
+        const request = await new Promise((resolve, reject) => {
+            const req = store.get(modelCacheKey);
+            req.onsuccess = () => resolve(req.result);
+            req.onerror = reject;
+        });
+        return request ? request.data : null;
+    } catch (error) {
+        console.error('Error retrieving cached model:', error);
+        return null;
     }
-    async function getCachedModel() {
-        try {
-            const db = await openDB();
-            const tx = db.transaction([modelCacheStore], 'readonly');
-            const store = tx.objectStore(modelCacheStore);
-            const request = await new Promise((resolve, reject) => {
-                const req = store.get(modelCacheKey);
-                req.onsuccess = () => resolve(req.result);
-                req.onerror = reject;
-            });
-            return request ? request.data : null;
-        } catch (error) {
-            console.error('Error retrieving cached model:', error);
-            return null;
-        }
-    }
-    async function loadModel() {
-        const modelLoading = document.getElementById('modelLoading');
-        modelLoading.classList.add('active');
-        try {
-            // Check for cached model
-            const cachedModel = await getCachedModel();
-            if (cachedModel) {
-                session = await ort.InferenceSession.create(cachedModel);
-                console.log('Model loaded from cache');
-                modelLoading.classList.add('success');
-                modelLoading.innerHTML = `
-                    <i class="fas fa-check-circle"></i>
-                    <span>AI model loaded from cache!</span>
-                `;
-                setTimeout(() => {
-                    modelLoading.classList.remove('active');
-                }, 2000);
-                return;
-            }
-            // Fetch and cache model if not found in cache
-            const response = await fetch(modelPath);
-            if (!response.ok) {
-                throw new Error(`Failed to fetch model: ${response.statusText}`);
-            }
-            const modelData = await response.arrayBuffer();
-            session = await ort.InferenceSession.create(modelData);
-            // Cache the model
-            await saveModelToCache(modelData);
-            console.log('Model loaded and cached successfully');
+}
+async function loadModel() {
+    const modelLoading = document.getElementById('modelLoading');
+    modelLoading.classList.add('active');
+    try {
+        const cachedModel = await getCachedModel();
+        if (cachedModel) {
+            session = await ort.InferenceSession.create(cachedModel);
+            console.log('Model loaded from cache');
             modelLoading.classList.add('success');
             modelLoading.innerHTML = `
                 <i class="fas fa-check-circle"></i>
-                <span>AI model loaded successfully!</span>
+                <span>AI model loaded from cache!</span>
             `;
             setTimeout(() => {
                 modelLoading.classList.remove('active');
             }, 2000);
-        } catch (error) {
-            console.error('Error loading model:', error);
-            modelLoading.classList.add('error');
-            modelLoading.innerHTML = `
-                <i class="fas fa-exclamation-circle"></i>
-                <span>Failed to load AI model: ${error.message}. Please refresh the page.</span>
-            `;
-            setTimeout(() => {
-                modelLoading.classList.remove('active');
-            }, 3000);
+            return;
         }
+        const response = await fetch(modelPath);
+        if (!response.ok) {
+            throw new Error(`Failed to fetch model: ${response.statusText}`);
+        }
+        const modelData = await response.arrayBuffer();
+        session = await ort.InferenceSession.create(modelData);
+        await saveModelToCache(modelData);
+        console.log('Model loaded and cached successfully');
+        modelLoading.classList.add('success');
+        modelLoading.innerHTML = `
+            <i class="fas fa-check-circle"></i>
+            <span>AI model loaded successfully!</span>
+        `;
+        setTimeout(() => {
+            modelLoading.classList.remove('active');
+        }, 2000);
+    } catch (error) {
+        console.error('Error loading model:', error);
+        modelLoading.classList.add('error');
+        modelLoading.innerHTML = `
+            <i class="fas fa-exclamation-circle"></i>
+            <span>Failed to load AI model: ${error.message}. Please refresh the page.</span>
+        `;
+        setTimeout(() => {
+            modelLoading.classList.remove('active');
+        }, 3000);
     }
-    // Initialize model loading
-    loadModel();
-    // Function to calculate age from DOB
-    function calculateAge(dobString) {
-        if (!dobString) return null;
-        const dob = new Date(dobString);
-        const today = new Date();
-        let age = today.getFullYear() - dob.getFullYear();
-        const monthDiff = today.getMonth() - dob.getMonth();
-        if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
-            age--;
-        }
-        return age;
+}
+// Initialize model loading
+loadModel();
+// Function to calculate age from DOB
+function calculateAge(dobString) {
+    if (!dobString) return null;
+    const dob = new Date(dobString);
+    const today = new Date();
+    let age = today.getFullYear() - dob.getFullYear();
+    const monthDiff = today.getMonth() - dob.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < dob.getDate())) {
+        age--;
     }
-    // Function to update age field when DOB changes
-    document.getElementById('patientDob').addEventListener('change', function() {
-        const age = calculateAge(this.value);
-        if (age !== null) {
-            document.getElementById('patientAge').value = age;
-        }
-    });
-    // Function to validate patient info
-    function validatePatientInfo() {
-        const name = document.getElementById('patientName').value.trim();
-        const dob = document.getElementById('patientDob').value;
-        const gender = document.getElementById('patientGender').value;
-        if (!name || !dob || !gender) {
-            showNotification('Please fill in all required patient information.', 'error');
-            return false;
-        }
-        return true;
+    return age;
+}
+// Function to update age field when DOB changes
+document.getElementById('patientDob').addEventListener('change', function() {
+    const age = calculateAge(this.value);
+    if (age !== null) {
+        document.getElementById('patientAge').value = age;
     }
-    // Continue to upload button
-    document.getElementById('continueToUploadBtn').addEventListener('click', function() {
-        if (!validatePatientInfo()) return;
-        
-        // Save patient demographics
-        patientDemographics = {
-            name: document.getElementById('patientName').value.trim(),
-            age: parseInt(document.getElementById('patientAge').value),
-            gender: document.getElementById('patientGender').value,
-            dob: document.getElementById('patientDob').value,
-            id: document.getElementById('patientId').value.trim()
+});
+// Function to validate patient info
+function validatePatientInfo() {
+    const name = document.getElementById('patientName').value.trim();
+    const dob = document.getElementById('patientDob').value;
+    const gender = document.getElementById('patientGender').value;
+    if (!name || !dob || !gender) {
+        showNotification('Please fill in all required patient information.', 'error');
+        return false;
+    }
+    return true;
+}
+// Continue to upload button
+document.getElementById('continueToUploadBtn').addEventListener('click', function() {
+    if (!validatePatientInfo()) return;
+    patientDemographics = {
+        name: document.getElementById('patientName').value.trim(),
+        age: parseInt(document.getElementById('patientAge').value),
+        gender: document.getElementById('patientGender').value,
+        dob: document.getElementById('patientDob').value,
+        id: document.getElementById('patientId').value.trim()
+    };
+    document.getElementById('step1').classList.remove('active');
+    document.getElementById('step1').classList.add('completed');
+    document.getElementById('step2').classList.add('active');
+    document.getElementById('patientInfoCard').style.display = 'none';
+    document.getElementById('uploadCard').style.display = 'block';
+    document.getElementById('uploadCard').scrollIntoView({ behavior: 'smooth' });
+});
+// Helper function to clean markdown formatting
+function cleanMarkdown(text) {
+    if (!text) return text;
+    let cleaned = text;
+    // Remove bold formatting: **text** or __text__
+    cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
+    cleaned = cleaned.replace(/__([^_]+)__/g, '$1');
+    // Remove italic formatting: *text* or _text_
+    cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
+    cleaned = cleaned.replace(/_([^_]+)_/g, '$1');
+    // Remove strikethrough: ~~text~~
+    cleaned = cleaned.replace(/~~([^~]+)~~/g, '$1');
+    // Remove inline code: `code`
+    cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
+    // Replace markdown bullets with •
+    cleaned = cleaned.replace(/^\s*[-*+]\s+/gm, '• ');
+    // Clean up any remaining isolated asterisks or underscores that might be left
+    cleaned = cleaned.replace(/\*([^*]*)\*/g, '$1'); // Catch any remaining single *
+    cleaned = cleaned.replace(/_([^_]*)_ /g, '$1 '); // Catch any remaining single _
+    // Ensure consistent bullet formatting
+    cleaned = cleaned.replace();
+    // Trim whitespace
+    cleaned = cleaned.trim();
+    return cleaned;
+}
+// Function to call Gemini API for enhanced radiologist-level analysis WITH AGE CONTEXT
+async function getGeminiAnalysis(detections, demographics) {
+    if (detections.length === 0) {
+        return {
+            impression: `The chest X-ray is within normal limits for a ${demographics.age}-year-old ${demographics.gender}. The heart size is normal with a cardiothoracic ratio less than 0.5. Lung fields are clear without focal opacities, effusions, or pneumothorax. Mediastinal contours are normal. Bony structures and soft tissues are unremarkable. No acute cardiopulmonary abnormality detected. Age-appropriate findings confirmed.`,
+            recommendations: "No immediate radiological follow-up required. Correlate with clinical symptoms; if persistent symptoms, consider repeat X-ray or advanced imaging as needed.",
+            findings: [],
+            emergency: false,
+            ageContext: `No abnormalities detected. Findings are consistent with normal age-related anatomy for a ${demographics.age}-year-old ${demographics.gender}.`
         };
-        
-        // Update step indicator
-        document.getElementById('step1').classList.remove('active');
-        document.getElementById('step1').classList.add('completed');
-        document.getElementById('step2').classList.add('active');
-        
-        // Hide patient info card and show upload card
-        document.getElementById('patientInfoCard').style.display = 'none';
-        document.getElementById('uploadCard').style.display = 'block';
-        document.getElementById('uploadCard').scrollIntoView({ behavior: 'smooth' });
-    });
-    // Function to call Gemini API for enhanced radiologist-level analysis WITH AGE CONTEXT
-    async function getGeminiAnalysis(detections, demographics) {
-        if (detections.length === 0) {
-            return {
-                impression: `The chest X-ray is within normal limits for a ${demographics.age}-year-old ${demographics.gender}. The heart size is normal with a cardiothoracic ratio less than 0.5. Lung fields are clear without focal opacities, effusions, or pneumothorax. Mediastinal contours are normal. Bony structures and soft tissues are unremarkable. No acute cardiopulmonary abnormality detected. Age-appropriate findings confirmed.`,
-                recommendations: "No immediate radiological follow-up required. Correlate with clinical symptoms; if persistent symptoms, consider repeat X-ray or advanced imaging as needed.",
-                findings: [],
-                emergency: false,
-                ageContext: `No abnormalities detected. Findings are consistent with normal age-related anatomy for a ${demographics.age}-year-old ${demographics.gender}.`
-            };
-        }
-        // Format the detected findings for the prompt with more details
-        const findingsText = detections.map(det => {
-            const className = classNames[det.classId];
-            const confidence = (det.score * 100).toFixed(2);
-            const boxSize = ((det.x2 - det.x1) * (det.y2 - det.y1)) / (imgSize * imgSize) * 100; // Approximate size percentage
-            return `- ${className} (Confidence: ${confidence}%, Approximate area: ${boxSize.toFixed(1)}% of image)`;
-        }).join('\n');
-        // Create age-specific context message
-       let ageContextMessage = "";
-
-       if (demographics.age < 2) {
-           ageContextMessage = "Patient is an infant. The thymus is often prominent and may mimic cardiomegaly on chest X-ray. This is a normal variant. Vascular markings can also appear relatively prominent due to higher cardiac output at this age.";
-       } else if (demographics.age < 18) {
-           ageContextMessage = "Patient is a child/adolescent. The cardiac silhouette and thymic appearance vary with age, with the thymus typically involuting by adolescence. Findings common in adults (e.g., calcification, mild cardiomegaly) are generally abnormal in children and should be interpreted with caution.";
-       } else if (demographics.age >= 65) {
-           ageContextMessage = "Patient is elderly. Age-related physiological changes may include vascular or costal cartilage calcifications, mild interstitial fibrosis, minor cardiac enlargement, and thoracic wall changes (e.g., kyphosis, elevated diaphragm). These may be benign and not necessarily pathologic.";
-       } else {
-           ageContextMessage = "Patient is an adult. Standard radiological interpretations apply. Age-related risk factors (e.g., early emphysematous changes, smoking-related findings) should be considered in context.";
-     }
-
-        const prompt = `
+    }
+    const findingsText = detections.map(det => {
+        const className = classNames[det.classId];
+        const confidence = (det.score * 100).toFixed(2);
+        const boxSize = ((det.x2 - det.x1) * (det.y2 - det.y1)) / (imgSize * imgSize) * 100;
+        return `- ${className} (Confidence: ${confidence}%, Approximate area: ${boxSize.toFixed(1)}% of image)`;
+    }).join('\n');
+    let ageContextMessage = "";
+    if (demographics.age < 2) {
+        ageContextMessage = "Patient is an infant. The thymus is often prominent and may mimic cardiomegaly on chest X-ray. This is a normal variant. Vascular markings can also appear relatively prominent due to higher cardiac output at this age.";
+    } else if (demographics.age < 18) {
+        ageContextMessage = "Patient is a child/adolescent. The cardiac silhouette and thymic appearance vary with age, with the thymus typically involuting by adolescence. Findings common in adults (e.g., calcification, mild cardiomegaly) are generally abnormal in children and should be interpreted with caution.";
+    } else if (demographics.age >= 65) {
+        ageContextMessage = "Patient is elderly. Age-related physiological changes may include vascular or costal cartilage calcifications, mild interstitial fibrosis, minor cardiac enlargement, and thoracic wall changes (e.g., kyphosis, elevated diaphragm). These may be benign and not necessarily pathologic.";
+    } else {
+        ageContextMessage = "Patient is an adult. Standard radiological interpretations apply. Age-related risk factors (e.g., early emphysematous changes, smoking-related findings) should be considered in context.";
+    }
+    const prompt = `
 Interpret the following AI-detected findings from a chest X-ray as a board-certified radiologist with over 25 years of experience. 
 The patient is a ${demographics.age}-year-old ${demographics.gender}. 
 Follow ACR (American College of Radiology) and RSNA (Radiological Society of North America) standards. 
 Incorporate demographic and age-specific considerations: ${ageContextMessage}
-
 Detected findings:
 ${findingsText}
-
 For each finding, include:
 - A precise diagnosis using radiological terminology, explicitly stating whether it is likely age-related/normal for this group or truly abnormal. 
 - DO NOT dismiss findings as “false positives.” Instead, reinterpret them in the clinical context of age and demographics.
@@ -1397,12 +1401,10 @@ For each finding, include:
 - Clinical implications, including infectious, neoplastic, or cardiac causes, with emphasis on how age affects likelihood.
 - Severity (mild/moderate/severe) and acuity (acute/chronic) with age context.
 - Emergency flag if urgent, with reason.
-
 Overall:
 - Impression: Holistic, professional summary integrating all findings, explicitly addressing how patient age influences interpretation. State if findings are likely benign variants or concerning.
 - Recommendations: Specific, prioritized next steps (e.g., CT chest, HRCT, PET-CT, labs, specialist consult), tailored to patient’s age and urgency.
 - Age Context: 1–2 sentences summarizing how the patient’s age affects this case.
-
 Output strictly in JSON with this schema:
 {
   "impression": "string",
@@ -1420,945 +1422,873 @@ Output strictly in JSON with this schema:
   "ageContext": "string"
 }
 `;
-
-try {
-    const response = await fetch(GEMINI_API_URL, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            contents: [{
-                parts: [{
-                    text: `${SYSTEM_INSTRUCTION}\n${prompt}`
-                }]
-            }],
-            generationConfig: {
-                temperature: 0.1,   // deterministic, professional tone
-                topK: 1,
-                topP: 0.95,
-                maxOutputTokens: 2048,
-            }
-        })
-    });
-
-    if (!response.ok) {
-        throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
-    }
-
-    const data = await response.json();
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-        throw new Error('Invalid response from Gemini API');
-    }
-
-    const textResponse = data.candidates[0].content.parts[0].text.trim();
-
-    // Remove potential markdown formatting
-    let cleanedResponse = textResponse;
-    if (cleanedResponse.startsWith('```json')) {
-        cleanedResponse = cleanedResponse.substring(7, cleanedResponse.lastIndexOf('```'));
-    } else if (cleanedResponse.startsWith('```')) {
-        cleanedResponse = cleanedResponse.substring(3, cleanedResponse.lastIndexOf('```'));
-    }
-
-    let analysis;
     try {
-        analysis = JSON.parse(cleanedResponse);
-
-        // Ensure ageContext always exists
-        if (!analysis.ageContext) {
-            analysis.ageContext = `Interpretation tailored for a ${demographics.age}-year-old ${demographics.gender}, factoring age-related patterns and risks.`;
+        const response = await fetch(GEMINI_API_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                contents: [{
+                    parts: [{
+                        text: `${SYSTEM_INSTRUCTION}
+${prompt}`
+                    }]
+                }],
+                generationConfig: {
+                    temperature: 0.1,
+                    topK: 1,
+                    topP: 0.95,
+                    maxOutputTokens: 2048,
+                }
+            })
+        });
+        if (!response.ok) {
+            throw new Error(`Gemini API error: ${response.status} ${response.statusText}`);
         }
-
-        // Ensure emergency field consistency
-        if (typeof analysis.emergency !== 'boolean') {
-            analysis.emergency = analysis.findings?.some(f => f.emergency) || false;
+        const data = await response.json();
+        if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+            throw new Error('Invalid response from Gemini API');
         }
-
-    } catch (parseError) {
-        console.warn('Failed to parse JSON. Falling back to safe analysis:', parseError);
-
-        // Fallback structured analysis
-        analysis = {
-            impression: `Detected ${detections.length} abnormality(ies) in a ${demographics.age}-year-old ${demographics.gender}. 
-            Unable to generate full structured interpretation. Recommend correlation with clinical history and radiologist review.`,
-            recommendations: "Refer to a radiologist for comprehensive interpretation. Consider further imaging if clinically indicated.",
+        const textResponse = data.candidates[0].content.parts[0].text.trim();
+        let cleanedResponse = textResponse;
+        if (cleanedResponse.startsWith('```json')) {
+            cleanedResponse = cleanedResponse.substring(7, cleanedResponse.lastIndexOf('```'));
+        } else if (cleanedResponse.startsWith('```')) {
+            cleanedResponse = cleanedResponse.substring(3, cleanedResponse.lastIndexOf('```'));
+        }
+        let analysis;
+        try {
+            analysis = JSON.parse(cleanedResponse);
+            // Clean markdown from analysis fields
+            analysis.impression = cleanMarkdown(analysis.impression);
+            analysis.recommendations = cleanMarkdown(analysis.recommendations);
+            analysis.ageContext = cleanMarkdown(analysis.ageContext);
+            analysis.findings = analysis.findings.map(finding => ({
+                ...finding,
+                diagnosis: cleanMarkdown(finding.diagnosis),
+                differentials: cleanMarkdown(finding.differentials),
+                context: cleanMarkdown(finding.context)
+            }));
+            if (!analysis.ageContext) {
+                analysis.ageContext = `Interpretation tailored for a ${demographics.age}-year-old ${demographics.gender}, factoring age-related patterns and risks.`;
+            }
+            if (typeof analysis.emergency !== 'boolean') {
+                analysis.emergency = analysis.findings?.some(f => f.emergency) || false;
+            }
+        } catch (parseError) {
+            console.warn('Failed to parse JSON. Falling back to safe analysis:', parseError);
+            analysis = {
+                impression: cleanMarkdown(`Detected ${detections.length} abnormality(ies) in a ${demographics.age}-year-old ${demographics.gender}. Unable to generate full structured interpretation. Recommend correlation with clinical history and radiologist review.`),
+                recommendations: cleanMarkdown("Refer to a radiologist for comprehensive interpretation. Consider further imaging if clinically indicated."),
+                findings: detections.map(det => ({
+                    name: classNames[det.classId],
+                    diagnosis: cleanMarkdown("Interpretation unavailable due to parsing error"),
+                    differentials: cleanMarkdown("- N/A"),
+                    context: cleanMarkdown("Refer to impression for general guidance with patient age considered."),
+                    emergency: false
+                })),
+                emergency: false,
+                ageContext: cleanMarkdown(`Patient is ${demographics.age} years old (${demographics.gender}). Age-adjusted interpretation is required.`)
+            };
+        }
+        return analysis;
+    } catch (error) {
+        console.error('Error getting Gemini analysis:', error);
+        return {
+            impression: cleanMarkdown(`Detected ${detections.length} abnormality(ies) in a ${demographics.age}-year-old ${demographics.gender}. Technical error occurred during AI interpretation. Age-specific context should be considered.`),
+            recommendations: cleanMarkdown("Seek radiologist review for definitive interpretation and management."),
             findings: detections.map(det => ({
                 name: classNames[det.classId],
-                diagnosis: "Interpretation unavailable due to parsing error",
-                differentials: "- N/A",
-                context: "Refer to impression for general guidance with patient age considered.",
+                diagnosis: cleanMarkdown("Technical error in AI analysis"),
+                differentials: cleanMarkdown("- N/A"),
+                context: cleanMarkdown("Clinical review required, especially in relation to patient age."),
                 emergency: false
             })),
             emergency: false,
-            ageContext: `Patient is ${demographics.age} years old (${demographics.gender}). Age-adjusted interpretation is required.`
+            ageContext: cleanMarkdown(`Error in AI analysis. Patient is ${demographics.age} years old (${demographics.gender}). Age-appropriate interpretation remains essential.`)
         };
     }
-
-    return analysis;
-
-} catch (error) {
-    console.error('Error getting Gemini analysis:', error);
-
-    // Final fallback if fetch or parsing fails
-    return {
-        impression: `Detected ${detections.length} abnormality(ies) in a ${demographics.age}-year-old ${demographics.gender}. 
-        Technical error occurred during AI interpretation. Age-specific context should be considered.`,
-        recommendations: "Seek radiologist review for definitive interpretation and management.",
-        findings: detections.map(det => ({
-            name: classNames[det.classId],
-            diagnosis: "Technical error in AI analysis",
-            differentials: "- N/A",
-            context: "Clinical review required, especially in relation to patient age.",
-            emergency: false
-        })),
-        emergency: false,
-        ageContext: `Error in AI analysis. Patient is ${demographics.age} years old (${demographics.gender}). Age-appropriate interpretation remains essential.`
-    };
 }
-    }
-    // Function to display AI analysis in the UI
-    function displayAIAnalysis(analysis) {
-        const aiAnalysisSection = document.getElementById('aiAnalysisSection');
-        const aiAnalysisContent = document.getElementById('aiAnalysisContent');
-        const ageContextAlert = document.getElementById('ageContextAlert');
-        const ageContextMessage = document.getElementById('ageContextMessage');
-        
-        aiAnalysisContent.innerHTML = '';
-        
-        // Display Age Context Alert
-        if (analysis.ageContext) {
-            ageContextMessage.textContent = analysis.ageContext;
-            ageContextAlert.style.display = 'block';
-        } else {
-            ageContextAlert.style.display = 'none';
-        }
-        
-        // Display Impression
-        const impressionDiv = document.createElement('div');
-        impressionDiv.innerHTML = `<strong>Impression:</strong><br>${analysis.impression.replace(/\n/g, '<br>')}`;
-        aiAnalysisContent.appendChild(impressionDiv);
-        
-        // Add spacing
-        aiAnalysisContent.appendChild(document.createElement('br'));
-        aiAnalysisContent.appendChild(document.createElement('br'));
-        
-        // Display Recommendations
-        const recommendationsDiv = document.createElement('div');
-        recommendationsDiv.innerHTML = `<strong>Recommendations:</strong><br>${analysis.recommendations.replace(/\n/g, '<br>')}`;
-        aiAnalysisContent.appendChild(recommendationsDiv);
-        
-        // Display individual findings if available
-        if (analysis.findings && analysis.findings.length > 0) {
-            aiAnalysisContent.appendChild(document.createElement('br'));
-            aiAnalysisContent.appendChild(document.createElement('br'));
-            const findingsTitle = document.createElement('div');
-            findingsTitle.innerHTML = '<strong>Detailed Findings Analysis:</strong>';
-            aiAnalysisContent.appendChild(findingsTitle);
-            const findingsList = document.createElement('ul');
-            findingsList.style.marginTop = '10px';
-            findingsList.style.marginLeft = '20px';
-            analysis.findings.forEach(finding => {
-                const findingItem = document.createElement('li');
-                findingItem.style.marginBottom = '10px';
-                let findingHTML = `<strong>${finding.name}:</strong><br>`;
-                findingHTML += `<span style="color: ${finding.emergency ? '#e63946' : 'inherit'}">${finding.diagnosis}</span><br>`;
-                findingHTML += `<em>Differentials: ${finding.differentials.replace()}</em><br>`;
-                findingHTML += `<em>${finding.context.replace()}</em>`;
-                if (finding.emergency) {
-                    findingHTML += ` <span class="emergency-badge">EMERGENCY</span>`;
-                }
-                findingItem.innerHTML = findingHTML;
-                findingsList.appendChild(findingItem);
-            });
-            aiAnalysisContent.appendChild(findingsList);
-        }
-        
-        // Show the AI analysis section
-        aiAnalysisSection.style.display = 'block';
-        
-        // Add emergency alert if needed
-        if (analysis.emergency || (analysis.findings && analysis.findings.some(f => f.emergency))) {
-            const emergencyAlert = document.createElement('div');
-            emergencyAlert.className = 'emergency-alert';
-            emergencyAlert.innerHTML = `
-                <strong><i class="fas fa-exclamation-triangle"></i> EMERGENCY ALERT:</strong>
-                The AI radiologist analysis has identified findings that may require immediate clinical attention.
-            `;
-            aiAnalysisContent.insertBefore(emergencyAlert, aiAnalysisContent.firstChild);
-        }
-    }
-    const imageUpload = document.getElementById('imageUpload');
-    const preview = document.getElementById('preview');
-    const canvas = document.getElementById('canvas');
-    const ctx = canvas.getContext('2d');
-    const predictBtn = document.getElementById('predictBtn');
-    const predictBtnText = document.getElementById('predictBtnText');
-    const generateReportBtn = document.getElementById('generateReportBtn');
-    const detectionsList = document.getElementById('detectionsList');
-    const uploadArea = document.getElementById('uploadArea');
-    const previewContainer = document.getElementById('previewContainer');
-    const analysisLoading = document.getElementById('analysisLoading');
-    const totalFindings = document.getElementById('totalFindings');
-    const highestConfidence = document.getElementById('highestConfidence');
-    const mostCommon = document.getElementById('mostCommon');
-    const reportSection = document.getElementById('reportSection');
-    const previewReportBtn = document.getElementById('previewReportBtn');
-    const resetReportBtn = document.getElementById('resetReportBtn');
-    const reportPreview = document.getElementById('reportPreview');
-    const printReportBtn = document.getElementById('printReportBtn');
-    const downloadReportBtn = document.getElementById('downloadReportBtn');
-    const closeReportBtn = document.getElementById('closeReportBtn');
+// Function to display AI analysis in the UI
+function displayAIAnalysis(analysis) {
     const aiAnalysisSection = document.getElementById('aiAnalysisSection');
+    const aiAnalysisContent = document.getElementById('aiAnalysisContent');
     const ageContextAlert = document.getElementById('ageContextAlert');
-    // Function to show custom notification
-    function showNotification(message, type = 'success') {
-        const notification = document.createElement('div');
-        notification.className = `notification ${type} active`;
-        notification.innerHTML = `
-            <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
-            <span>${message}</span>
+    const ageContextMessage = document.getElementById('ageContextMessage');
+    aiAnalysisContent.innerHTML = '';
+    if (analysis.ageContext) {
+        ageContextMessage.textContent = analysis.ageContext;
+        ageContextAlert.style.display = 'block';
+    } else {
+        ageContextAlert.style.display = 'none';
+    }
+    const impressionDiv = document.createElement('div');
+    impressionDiv.innerHTML = `<strong>Impression:</strong><br>${analysis.impression.replace('<br>')}`;
+    aiAnalysisContent.appendChild(impressionDiv);
+    aiAnalysisContent.appendChild(document.createElement('br'));
+    aiAnalysisContent.appendChild(document.createElement('br'));
+    const recommendationsDiv = document.createElement('div');
+    recommendationsDiv.innerHTML = `<strong>Recommendations:</strong><br>${analysis.recommendations.replace( '<br>')}`;
+    aiAnalysisContent.appendChild(recommendationsDiv);
+    if (analysis.findings && analysis.findings.length > 0) {
+        aiAnalysisContent.appendChild(document.createElement('br'));
+        aiAnalysisContent.appendChild(document.createElement('br'));
+        const findingsTitle = document.createElement('div');
+        findingsTitle.innerHTML = '<strong>Detailed Findings Analysis:</strong>';
+        aiAnalysisContent.appendChild(findingsTitle);
+        const findingsList = document.createElement('ul');
+        findingsList.style.marginTop = '10px';
+        findingsList.style.marginLeft = '20px';
+        analysis.findings.forEach(finding => {
+            const findingItem = document.createElement('li');
+            findingItem.style.marginBottom = '10px';
+            let findingHTML = `<strong>${finding.name}:</strong><br>`;
+            findingHTML += `<span style="color: ${finding.emergency ? '#e63946' : 'inherit'}">${finding.diagnosis}</span><br>`;
+            findingHTML += `<em>Differentials:</em><br>${finding.differentials.replace('\n' ,'<br>')}<br>`;
+            findingHTML += `<em>${finding.context.replace( '\n','<br>')}</em>`;
+            if (finding.emergency) {
+                findingHTML += ` <span class="emergency-badge">EMERGENCY</span>`;
+            }
+            findingItem.innerHTML = findingHTML;
+            findingsList.appendChild(findingItem);
+        });
+        aiAnalysisContent.appendChild(findingsList);
+    }
+    aiAnalysisSection.style.display = 'block';
+    if (analysis.emergency || (analysis.findings && analysis.findings.some(f => f.emergency))) {
+        const emergencyAlert = document.createElement('div');
+        emergencyAlert.className = 'emergency-alert';
+        emergencyAlert.innerHTML = `
+            <strong><i class="fas fa-exclamation-triangle"></i> EMERGENCY ALERT:</strong>
+            The AI radiologist analysis has identified findings that may require immediate clinical attention.
         `;
-        document.querySelector('.container').prepend(notification);
-        setTimeout(() => {
-            notification.classList.remove('active');
-            setTimeout(() => notification.remove(), 3000);
-        }, 3000);
+        aiAnalysisContent.insertBefore(emergencyAlert, aiAnalysisContent.firstChild);
     }
-    // Drag and drop functionality
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadArea.style.borderColor = 'var(--primary)';
-        uploadArea.style.background = 'rgba(169, 214, 229, 0.3)';
-    });
-    uploadArea.addEventListener('dragleave', () => {
-        uploadArea.style.borderColor = 'var(--primary-light)';
-        uploadArea.style.background = 'rgba(169, 214, 229, 0.1)';
-    });
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadArea.style.borderColor = 'var(--primary-light)';
-        uploadArea.style.background = 'rgba(169, 214, 229, 0.1)';
-        if (e.dataTransfer.files.length) {
-            imageUpload.files = e.dataTransfer.files;
-            handleFileUpload(e.dataTransfer.files[0]);
-        }
-    });
-    uploadArea.addEventListener('click', () => {
-        imageUpload.click();
-    });
-    function handleFileUpload(file) {
-        if (!file.type.startsWith('image/')) {
-            showNotification('Please upload a valid image file.', 'error');
-            return;
-        }
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            preview.src = event.target.result;
-            currentImageDataURL = event.target.result;
-            preview.onload = () => {
-                originalWidth = preview.naturalWidth;
-                originalHeight = preview.naturalHeight;
-                canvas.width = preview.width;
-                canvas.height = preview.height;
-                displayRatioX = preview.width / originalWidth;
-                displayRatioY = preview.height / originalHeight;
-                predictBtn.disabled = !session;
-                previewContainer.style.display = 'block';
-                analysisLoading.classList.remove('active', 'success', 'error');
-                analysisLoading.innerHTML = `
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>Analyzing X-ray image, please wait...</span>
-                `;
-                // Hide AI analysis section when new image is uploaded
-                aiAnalysisSection.style.display = 'none';
-                ageContextAlert.style.display = 'none';
-            };
-            reader.onerror = () => {
-                showNotification('Error reading the image file. Please try again.', 'error');
-            };
-        };
-        reader.readAsDataURL(file);
+}
+const imageUpload = document.getElementById('imageUpload');
+const preview = document.getElementById('preview');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const predictBtn = document.getElementById('predictBtn');
+const predictBtnText = document.getElementById('predictBtnText');
+const generateReportBtn = document.getElementById('generateReportBtn');
+const detectionsList = document.getElementById('detectionsList');
+const uploadArea = document.getElementById('uploadArea');
+const previewContainer = document.getElementById('previewContainer');
+const analysisLoading = document.getElementById('analysisLoading');
+const totalFindings = document.getElementById('totalFindings');
+const highestConfidence = document.getElementById('highestConfidence');
+const mostCommon = document.getElementById('mostCommon');
+const reportSection = document.getElementById('reportSection');
+const previewReportBtn = document.getElementById('previewReportBtn');
+const resetReportBtn = document.getElementById('resetReportBtn');
+const reportPreview = document.getElementById('reportPreview');
+const printReportBtn = document.getElementById('printReportBtn');
+const downloadReportBtn = document.getElementById('downloadReportBtn');
+const closeReportBtn = document.getElementById('closeReportBtn');
+const aiAnalysisSection = document.getElementById('aiAnalysisSection');
+const ageContextAlert = document.getElementById('ageContextAlert');
+function showNotification(message, type = 'success') {
+    const notification = document.createElement('div');
+    notification.className = `notification ${type} active`;
+    notification.innerHTML = `
+        <i class="fas fa-${type === 'success' ? 'check-circle' : 'exclamation-circle'}"></i>
+        <span>${message}</span>
+    `;
+    document.querySelector('.container').prepend(notification);
+    setTimeout(() => {
+        notification.classList.remove('active');
+        setTimeout(() => notification.remove(), 3000);
+    }, 3000);
+}
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = 'var(--primary)';
+    uploadArea.style.background = 'rgba(169, 214, 229, 0.3)';
+});
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.style.borderColor = 'var(--primary-light)';
+    uploadArea.style.background = 'rgba(169, 214, 229, 0.1)';
+});
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.style.borderColor = 'var(--primary-light)';
+    uploadArea.style.background = 'rgba(169, 214, 229, 0.1)';
+    if (e.dataTransfer.files.length) {
+        imageUpload.files = e.dataTransfer.files;
+        handleFileUpload(e.dataTransfer.files[0]);
     }
-    imageUpload.addEventListener('change', (e) => {
-        const file = e.target.files[0];
-        if (file) handleFileUpload(file);
-    });
-    predictBtn.addEventListener('click', async () => {
-        if (!session) {
-            showNotification('Model is still loading. Please wait and try again.', 'error');
-            return;
-        }
-        // Validate that patient demographics are available
-        if (!patientDemographics.age || !patientDemographics.gender) {
-            showNotification('Patient demographics are required before analysis. Please go back and complete patient information.', 'error');
-            return;
-        }
-        try {
-            // Update UI for analyzing state
-            predictBtn.disabled = true;
-            predictBtnText.textContent = 'Analyzing...';
-            predictBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> <span id="predictBtnText">Analyzing...</span>`;
-            analysisLoading.classList.add('active');
-            detectionsList.innerHTML = '';
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            // Hide AI analysis section during new analysis
+});
+uploadArea.addEventListener('click', () => {
+    imageUpload.click();
+});
+function handleFileUpload(file) {
+    if (!file.type.startsWith('image/')) {
+        showNotification('Please upload a valid image file.', 'error');
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        preview.src = event.target.result;
+        currentImageDataURL = event.target.result;
+        preview.onload = () => {
+            originalWidth = preview.naturalWidth;
+            originalHeight = preview.naturalHeight;
+            canvas.width = preview.width;
+            canvas.height = preview.height;
+            displayRatioX = preview.width / originalWidth;
+            displayRatioY = preview.height / originalHeight;
+            predictBtn.disabled = !session;
+            previewContainer.style.display = 'block';
+            analysisLoading.classList.remove('active', 'success', 'error');
+            analysisLoading.innerHTML = `
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Analyzing X-ray image, please wait...</span>
+            `;
             aiAnalysisSection.style.display = 'none';
             ageContextAlert.style.display = 'none';
-            // Ensure spinner is visible for at least 1 second for UX
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            const inputTensor = await preprocessImage(preview);
-            const feeds = { images: inputTensor };
-            const outputMap = await session.run(feeds);
-            const output = outputMap.output0 || outputMap[Object.keys(outputMap)[0]];
-            currentDetections = postprocessOutput(output);
-            drawDetections(currentDetections);
-            updateStats(currentDetections);
-            // Call Gemini API for radiologist-level analysis WITH PATIENT DEMOGRAPHICS
-            if (currentDetections.length > 0 || true) { // Always call for both positive and negative cases
-                analysisLoading.innerHTML = `
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>Processing final report please wait...</span>
+        };
+        reader.onerror = () => {
+            showNotification('Error reading the image file. Please try again.', 'error');
+        };
+    };
+    reader.readAsDataURL(file);
+}
+imageUpload.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) handleFileUpload(file);
+});
+predictBtn.addEventListener('click', async () => {
+    if (!session) {
+        showNotification('Model is still loading. Please wait and try again.', 'error');
+        return;
+    }
+    if (!patientDemographics.age || !patientDemographics.gender) {
+        showNotification('Patient demographics are required before analysis. Please go back and complete patient information.', 'error');
+        return;
+    }
+    try {
+        predictBtn.disabled = true;
+        predictBtnText.textContent = 'Analyzing...';
+        predictBtn.innerHTML = `<i class="fas fa-spinner fa-spin"></i> <span id="predictBtnText">Analyzing...</span>`;
+        analysisLoading.classList.add('active');
+        detectionsList.innerHTML = '';
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        aiAnalysisSection.style.display = 'none';
+        ageContextAlert.style.display = 'none';
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        const inputTensor = await preprocessImage(preview);
+        const feeds = { images: inputTensor };
+        const outputMap = await session.run(feeds);
+        const output = outputMap.output0 || outputMap[Object.keys(outputMap)[0]];
+        currentDetections = postprocessOutput(output);
+        drawDetections(currentDetections);
+        updateStats(currentDetections);
+        if (currentDetections.length > 0 || true) {
+            analysisLoading.innerHTML = `
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Processing final report please wait...</span>
+            `;
+            try {
+                aiAnalysisResult = await getGeminiAnalysis(currentDetections, patientDemographics);
+                displayAIAnalysis(aiAnalysisResult);
+            } catch (error) {
+                console.error('Error in AI analysis:', error);
+                aiAnalysisSection.style.display = 'block';
+                document.getElementById('aiAnalysisContent').innerHTML = `
+                    <div class="emergency-alert">
+                        <strong>Error:</strong> Failed to get AI radiologist analysis. ${error.message}
+                    </div>
+                    <p>Please try again or consult with a human radiologist.</p>
                 `;
-                try {
-                    aiAnalysisResult = await getGeminiAnalysis(currentDetections, patientDemographics);
-                    displayAIAnalysis(aiAnalysisResult);
-                } catch (error) {
-                    console.error('Error in AI analysis:', error);
-                    aiAnalysisSection.style.display = 'block';
-                    document.getElementById('aiAnalysisContent').innerHTML = `
-                        <div class="emergency-alert">
-                            <strong>Error:</strong> Failed to get AI radiologist analysis. ${error.message}
-                        </div>
-                        <p>Please try again or consult with a human radiologist.</p>
-                    `;
-                    // Create a basic analysis result for report generation
-                    aiAnalysisResult = {
-                        impression: "Technical error occurred during AI analysis. Clinical correlation with a human radiologist is strongly advised, especially considering patient age and demographics.",
-                        recommendations: "Consult with a radiologist for comprehensive interpretation and management recommendations tailored to the patient's specific age and condition.",
-                        findings: currentDetections.map(det => ({
-                            name: classNames[det.classId],
-                            diagnosis: "Technical error in AI analysis",
-                            differentials: "- N/A",
-                            context: "Please review with a human radiologist, considering patient age and demographics",
-                            emergency: false
-                        })),
-                        emergency: false,
-                        ageContext: `Patient is ${patientDemographics.age} years old (${patientDemographics.gender}). Age-appropriate interpretation is essential.`
-                    };
-                    // Show age context even in error case
-                    document.getElementById('ageContextMessage').textContent = aiAnalysisResult.ageContext;
-                    ageContextAlert.style.display = 'block';
+                aiAnalysisResult = {
+                    impression: cleanMarkdown(`Technical error occurred during AI analysis. Clinical correlation with a human radiologist is strongly advised, especially considering patient age and demographics.`),
+                    recommendations: cleanMarkdown("Consult with a radiologist for comprehensive interpretation and management recommendations tailored to the patient's specific age and condition."),
+                    findings: currentDetections.map(det => ({
+                        name: classNames[det.classId],
+                        diagnosis: cleanMarkdown("Technical error in AI analysis"),
+                        differentials: cleanMarkdown("- N/A"),
+                        context: cleanMarkdown("Please review with a human radiologist, considering patient age and demographics"),
+                        emergency: false
+                    })),
+                    emergency: false,
+                    ageContext: cleanMarkdown(`Patient is ${patientDemographics.age} years old (${patientDemographics.gender}). Age-appropriate interpretation is essential.`)
+                };
+                document.getElementById('ageContextMessage').textContent = aiAnalysisResult.ageContext;
+                ageContextAlert.style.display = 'block';
+            }
+        }
+        generateReportBtn.disabled = false;
+        analysisLoading.classList.add('success');
+        analysisLoading.innerHTML = `
+            <i class="fas fa-check-circle"></i>
+            <span>Analysis completed successfully!</span>
+        `;
+        document.getElementById('step2').classList.remove('active');
+        document.getElementById('step2').classList.add('completed');
+        document.getElementById('step3').classList.add('active');
+        setTimeout(() => {
+            analysisLoading.classList.remove('active', 'success');
+            analysisLoading.innerHTML = `
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Analyzing X-ray image, please wait...</span>
+            `;
+        }, 2000);
+    } catch (error) {
+        console.error('Error during prediction:', error);
+        analysisLoading.classList.add('error');
+        analysisLoading.innerHTML = `
+            <i class="fas fa-exclamation-circle"></i>
+            <span>Analysis failed: ${error.message}. Please try again.</span>
+        `;
+        setTimeout(() => {
+            analysisLoading.classList.remove('active', 'error');
+            analysisLoading.innerHTML = `
+                <i class="fas fa-spinner fa-spin"></i>
+                <span>Analyzing X-ray image, please wait...</span>
+            `;
+        }, 3000);
+        showNotification(`An error occurred during analysis: ${error.message}. Please try again.`, 'error');
+    } finally {
+        predictBtn.disabled = !session;
+        predictBtn.innerHTML = `<i class="fas fa-search"></i> <span id="predictBtnText">Analyze X-ray</span>`;
+    }
+});
+generateReportBtn.addEventListener('click', () => {
+    document.getElementById('step3').classList.remove('active');
+    document.getElementById('step3').classList.add('completed');
+    document.getElementById('step4').classList.add('active');
+    document.getElementById('reportPatientName').value = patientDemographics.name;
+    document.getElementById('reportPatientId').value = patientDemographics.id;
+    document.getElementById('reportPatientDob').value = patientDemographics.dob;
+    document.getElementById('reportPatientGender').value = patientDemographics.gender;
+    document.getElementById('reportPatientAge').value = patientDemographics.age;
+    reportSection.style.display = 'block';
+    reportSection.scrollIntoView({ behavior: 'smooth' });
+});
+async function generateSingleAnnotationDataURL(det) {
+    const tempCanvas = document.createElement('canvas');
+    tempCanvas.width = originalWidth;
+    tempCanvas.height = originalHeight;
+    const tempCtx = tempCanvas.getContext('2d');
+    const fullImg = new Image();
+    fullImg.src = currentImageDataURL;
+    await new Promise(resolve => { fullImg.onload = resolve; });
+    tempCtx.drawImage(fullImg, 0, 0, originalWidth, originalHeight);
+    const x1 = det.x1 * scaleFactor;
+    const y1 = det.y1 * scaleFactor;
+    const x2 = det.x2 * scaleFactor;
+    const y2 = det.y2 * scaleFactor;
+    const className = classNames[det.classId];
+    const label = `${className} ${(det.score * 100).toFixed(2)}%`;
+    const color = classColors[className];
+    tempCtx.strokeStyle = color;
+    tempCtx.lineWidth = 4;
+    tempCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+    const fontSize = Math.max(16, originalWidth / 50);
+    tempCtx.font = `bold ${fontSize}px Arial`;
+    const textWidth = tempCtx.measureText(label).width;
+    const textHeight = fontSize * 1.2;
+    let labelX = x1;
+    let labelY = y1 - textHeight - 5;
+    if (labelY < 0) {
+        labelY = y1 + textHeight + 5;
+    }
+    tempCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    roundRect(tempCtx, labelX, labelY, textWidth + 10, textHeight, 5);
+    tempCtx.fillStyle = color;
+    tempCtx.fillText(label, labelX + 5, labelY + textHeight - 5);
+    return tempCanvas.toDataURL('image/jpeg', 0.95);
+}
+previewReportBtn.addEventListener('click', async () => {
+    document.getElementById('reportPatientNameDisplay').textContent = document.getElementById('reportPatientName').value || 'Not provided';
+    document.getElementById('reportPatientIdDisplay').textContent = document.getElementById('reportPatientId').value || 'Not provided';
+    document.getElementById('reportPatientDobDisplay').textContent = document.getElementById('reportPatientDob').value || 'Not provided';
+    document.getElementById('reportPatientGenderDisplay').textContent = document.getElementById('reportPatientGender').value || 'Not provided';
+    document.getElementById('reportPatientAgeDisplay').textContent = document.getElementById('reportPatientAge').value || 'Not provided';
+    document.getElementById('reportRadiologistName').textContent = document.getElementById('radiologistName').value || 'Not provided';
+    document.getElementById('reportFacilityDisplay').textContent = document.getElementById('radiologistFacility').value || 'Not provided';
+    document.getElementById('reportRadiologistLicense').textContent = document.getElementById('radiologistLicense').value || 'Not provided';
+    document.getElementById('reportSignature').textContent = document.getElementById('radiologistSignature').value || 'Radiologist Signature';
+    const now = new Date();
+    document.getElementById('reportStudyDate').textContent = now.toLocaleDateString();
+    const findingsContainer = document.getElementById('reportFindings');
+    findingsContainer.innerHTML = '';
+    if (currentDetections.length > 0) {
+        const grid = document.createElement('div');
+        grid.className = 'conditions-grid';
+        for (const det of currentDetections) {
+            const className = classNames[det.classId];
+            const color = classColors[className];
+            const confidence = (det.score * 100).toFixed(2);
+            const item = document.createElement('div');
+            item.className = 'condition-item';
+            const img = document.createElement('img');
+            img.src = await generateSingleAnnotationDataURL(det);
+            item.appendChild(img);
+            const nameEl = document.createElement('h4');
+            nameEl.style.color = color;
+            nameEl.textContent = className;
+            item.appendChild(nameEl);
+            const confP = document.createElement('p');
+            confP.textContent = `${confidence}% Confident`;
+            item.appendChild(confP);
+            const bar = document.createElement('div');
+            bar.className = 'confidence-bar';
+            const level = document.createElement('div');
+            level.className = 'confidence-level';
+            level.style.width = `${confidence}%`;
+            level.style.background = color;
+            bar.appendChild(level);
+            item.appendChild(bar);
+            grid.appendChild(item);
+        }
+        findingsContainer.appendChild(grid);
+        document.getElementById('reportImpression').textContent = aiAnalysisResult ? aiAnalysisResult.impression : cleanMarkdown(`The chest X-ray demonstrates ${currentDetections.length} abnormality(ies) as detailed above. Clinical correlation is advised, considering the patient's age of ${patientDemographics.age} years.`);
+        document.getElementById('reportRecommendation').textContent = aiAnalysisResult ? aiAnalysisResult.recommendations : cleanMarkdown("Based on the findings and patient age, further evaluation with additional imaging or clinical assessment may be warranted. Follow-up as clinically indicated.");
+    } else {
+        findingsContainer.innerHTML = `
+            <div class="no-detections">
+                <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+                <p>No abnormalities detected.</p>
+            </div>
+        `;
+        document.getElementById('reportImpression').textContent = aiAnalysisResult ? aiAnalysisResult.impression : cleanMarkdown(`Based on the AI analysis of the chest X-ray for this ${patientDemographics.age}-year-old ${patientDemographics.gender} patient, no significant abnormalities were detected. Clinical correlation is advised.`);
+        document.getElementById('reportRecommendation').textContent = aiAnalysisResult ? aiAnalysisResult.recommendations : cleanMarkdown("No further imaging is recommended at this time based on these findings. Follow-up as clinically indicated, considering the patient's age and clinical presentation.");
+    }
+    const logoElement = document.querySelector('.report-logo');
+    if (logoElement) {
+        logoElement.style.display = 'none';
+    }
+    document.getElementById('step4').classList.remove('active');
+    document.getElementById('step4').classList.add('completed');
+    document.getElementById('step5').classList.add('active');
+    reportPreview.style.display = 'block';
+    reportPreview.scrollIntoView({ behavior: 'smooth' });
+});
+resetReportBtn.addEventListener('click', () => {
+    document.getElementById('patientName').value = '';
+    document.getElementById('patientId').value = '';
+    document.getElementById('patientDob').value = '';
+    document.getElementById('patientGender').value = '';
+    document.getElementById('patientAge').value = '';
+    document.getElementById('radiologistName').value = '';
+    document.getElementById('radiologistLicense').value = '';
+    document.getElementById('radiologistSignature').value = '';
+    document.getElementById('additionalNotes').value = '';
+    const logoElement = document.querySelector('.report-logo');
+    if (logoElement) {
+        logoElement.style.display = 'flex';
+    }
+});
+printReportBtn.addEventListener('click', () => {
+    const logoElement = document.querySelector('.report-logo');
+    if (logoElement) {
+        logoElement.style.display = 'flex';
+    }
+    window.print();
+});
+downloadReportBtn.addEventListener('click', async () => {
+    try {
+        if (typeof window.jspdf === 'undefined') {
+            throw new Error('PDF library not loaded. Please refresh the page and try again.');
+        }
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: 'a4'
+        });
+        downloadReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
+        downloadReportBtn.disabled = true;
+        const pageWidth = doc.internal.pageSize.getWidth();
+        const pageHeight = doc.internal.pageSize.getHeight();
+        const margin = 15;
+        const gap = 10;
+        const columnWidth = (pageWidth - 2 * margin - gap) / 2;
+        const maxImgWidth = 50;
+        const maxImgHeight = 80;
+        let yPos = margin;
+        try {
+            const logo = new Image();
+            logo.src = 'dasmedhub-logo.png';
+            await new Promise(resolve => { logo.onload = resolve; });
+            doc.addImage(logo, 'PNG', margin, yPos, 40, 20);
+        } catch (error) {
+            console.warn('Could not load logo for PDF:', error);
+            doc.setFont('times', 'normal');
+            doc.setFontSize(12);
+            doc.text('DAS medhub', margin, yPos + 10);
+        }
+        doc.setFont('times', 'bold');
+        doc.setFontSize(18);
+        doc.setTextColor(40, 53, 147);
+        doc.text('Radiology Report', pageWidth / 2, yPos + 10, { align: 'center' });
+        doc.setFont('times', 'bold');
+        doc.setFontSize(11);
+        doc.setTextColor(100, 100, 100);
+        doc.text('Chest X-ray Analysis and Findings', pageWidth / 2, yPos + 18, { align: 'center' });
+        yPos += 30;
+        doc.setFont('times', 'bold');
+        doc.setFontSize(12);
+        doc.text('Patient Information:', margin, yPos);
+        doc.text('Study Information:', margin + columnWidth + gap, yPos);
+        yPos += 10;
+        doc.setFont('times', 'normal');
+        doc.setFontSize(11);
+        doc.text(`Name: ${document.getElementById('reportPatientNameDisplay').textContent}`, margin, yPos);
+        doc.text(`Facility: ${document.getElementById('radiologistFacility').value || 'Not provided'}`, margin + columnWidth + gap, yPos);
+        yPos += 7;
+        doc.text(`ID: ${document.getElementById('reportPatientIdDisplay').textContent}`, margin, yPos);
+        doc.text(`Scan Type: Chest X-ray`, margin + columnWidth + gap, yPos);
+        yPos += 7;
+        doc.text(`DOB: ${document.getElementById('reportPatientDobDisplay').textContent}`, margin, yPos);
+        doc.text(`Date Processed: ${document.getElementById('reportStudyDate').textContent}`, margin + columnWidth + gap, yPos);
+        yPos += 7;
+        doc.text(`Gender: ${document.getElementById('reportPatientGenderDisplay').textContent}`, margin, yPos);
+        yPos += 7;
+        doc.text(`Age: ${document.getElementById('reportPatientAgeDisplay').textContent}`, margin, yPos);
+        yPos += 15;
+        doc.setFont('times', 'bold');
+        doc.setFontSize(12);
+        doc.text('Radiologist Information:', margin, yPos);
+        yPos += 10;
+        doc.setFont('times', 'normal');
+        doc.setFontSize(11);
+        doc.text(`Name: ${document.getElementById('reportRadiologistName').textContent}`, margin, yPos);
+        yPos += 7;
+        doc.text(`License: ${document.getElementById('reportRadiologistLicense').textContent}`, margin, yPos);
+        yPos += 15;
+        doc.setFont('times', 'bold');
+        doc.setFontSize(12);
+        doc.text('Conditions Found:', margin, yPos);
+        yPos += 10;
+        if (currentDetections.length > 0) {
+            let xPos = margin;
+            let itemsInRow = 0;
+            let maxRowHeight = 0;
+            for (const det of currentDetections) {
+                const className = classNames[det.classId];
+                const confidence = (det.score * 100).toFixed(2);
+                const color = classColors[className];
+                const rgb = color.match(/\d+/g).map(Number);
+                const imgRatio = originalHeight / originalWidth;
+                const imgWidth = columnWidth;
+                let imgHeight = imgWidth * imgRatio;
+                if (imgHeight > maxImgHeight) {
+                    imgHeight = maxImgHeight;
+                }
+                const textHeights = 7 + 7 + 10 + 5;
+                const itemHeight = imgHeight + textHeights + 10;
+                if (yPos + itemHeight > pageHeight - margin) {
+                    doc.addPage();
+                    yPos = margin;
+                    xPos = margin;
+                    itemsInRow = 0;
+                    maxRowHeight = 0;
+                }
+                maxRowHeight = Math.max(maxRowHeight, itemHeight);
+                const url = await generateSingleAnnotationDataURL(det);
+                doc.addImage(url, 'JPEG', xPos, yPos, imgWidth, imgHeight);
+                let textY = yPos + imgHeight + 5;
+                doc.setFont('times', 'bold');
+                doc.setFontSize(11);
+                doc.setTextColor(rgb[0], rgb[1], rgb[2]);
+                doc.text(className, xPos, textY);
+                textY += 7;
+                doc.setFont('times', 'normal');
+                doc.setTextColor(0, 0, 0);
+                doc.text(`${confidence}% Confident`, xPos, textY);
+                textY += 7;
+                doc.setFillColor(221, 221, 221);
+                doc.roundedRect(xPos, textY, columnWidth, 4, 2, 2, 'F');
+                doc.setFillColor(rgb[0], rgb[1], rgb[2]);
+                doc.roundedRect(xPos, textY, (confidence / 100) * columnWidth, 4, 2, 2, 'F');
+                textY += 10;
+                itemsInRow++;
+                if (itemsInRow === 2) {
+                    yPos += maxRowHeight + 10;
+                    xPos = margin;
+                    itemsInRow = 0;
+                    maxRowHeight = 0;
+                } else {
+                    xPos += columnWidth + gap;
                 }
             }
-            generateReportBtn.disabled = false; // Enable report generation regardless of findings
-            analysisLoading.classList.add('success');
-            analysisLoading.innerHTML = `
-                <i class="fas fa-check-circle"></i>
-                <span>Analysis completed successfully!</span>
-            `;
-            // Update step indicator
-            document.getElementById('step2').classList.remove('active');
-            document.getElementById('step2').classList.add('completed');
-            document.getElementById('step3').classList.add('active');
-            setTimeout(() => {
-                analysisLoading.classList.remove('active', 'success');
-                analysisLoading.innerHTML = `
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>Analyzing X-ray image, please wait...</span>
-                `;
-            }, 2000);
-        } catch (error) {
-            console.error('Error during prediction:', error);
-            analysisLoading.classList.add('error');
-            analysisLoading.innerHTML = `
-                <i class="fas fa-exclamation-circle"></i>
-                <span>Analysis failed: ${error.message}. Please try again.</span>
-            `;
-            setTimeout(() => {
-                analysisLoading.classList.remove('active', 'error');
-                analysisLoading.innerHTML = `
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>Analyzing X-ray image, please wait...</span>
-                `;
-            }, 3000);
-            showNotification(`An error occurred during analysis: ${error.message}. Please try again.`, 'error');
-        } finally {
-            predictBtn.disabled = !session;
-            predictBtn.innerHTML = `<i class="fas fa-search"></i> <span id="predictBtnText">Analyze X-ray</span>`;
+            if (itemsInRow === 1) {
+                yPos += maxRowHeight + 10;
+            }
+        } else {
+            doc.setFont('times', 'normal');
+            doc.setFontSize(11);
+            doc.text('No abnormalities detected.', margin, yPos);
+            yPos += 15;
         }
+        if (yPos > pageHeight - 50) {
+            doc.addPage();
+            yPos = margin;
+        }
+        doc.setFont('times', 'bold');
+        doc.setFontSize(12);
+        doc.text('Impression:', margin, yPos);
+        yPos += 10;
+        doc.setFont('times', 'normal');
+        doc.setFontSize(11);
+        const impression = document.getElementById('reportImpression').textContent;
+        const splitImpression = doc.splitTextToSize(impression, pageWidth - 2 * margin);
+        doc.text(splitImpression, margin, yPos);
+        yPos += (splitImpression.length * 7) + 15;
+        if (yPos > pageHeight - 50) {
+            doc.addPage();
+            yPos = margin;
+        }
+        doc.setFont('times', 'bold');
+        doc.setFontSize(12);
+        doc.text('Recommendation:', margin, yPos);
+        yPos += 10;
+        doc.setFont('times', 'normal');
+        doc.setFontSize(11);
+        const recommendation = document.getElementById('reportRecommendation').textContent;
+        const splitRecommendation = doc.splitTextToSize(recommendation, pageWidth - 2 * margin);
+        doc.text(splitRecommendation, margin, yPos);
+        yPos += (splitRecommendation.length * 7) + 15;
+        const additionalNotes = document.getElementById('additionalNotes').value;
+        if (additionalNotes) {
+            if (yPos > pageHeight - 50) {
+                doc.addPage();
+                yPos = margin;
+            }
+            doc.setFont('times', 'bold');
+            doc.setFontSize(12);
+            doc.text('Additional Notes:', margin, yPos);
+            yPos += 10;
+            doc.setFont('times', 'normal');
+            doc.setFontSize(11);
+            const splitNotes = doc.splitTextToSize(additionalNotes, pageWidth - 2 * margin);
+            doc.text(splitNotes, margin, yPos);
+            yPos += (splitNotes.length * 7) + 15;
+        }
+        if (yPos > pageHeight - 50) {
+            doc.addPage();
+            yPos = margin;
+        }
+        doc.setFont('times', 'bold');
+        doc.setFontSize(12);
+        doc.text('Radiologist:', margin, yPos);
+        yPos += 10;
+        doc.setFont('times', 'normal');
+        doc.setFontSize(11);
+        doc.text(`Name: ${document.getElementById('reportRadiologistName').textContent}`, margin, yPos);
+        yPos += 7;
+        doc.text(`License: ${document.getElementById('reportRadiologistLicense').textContent}`, margin, yPos);
+        yPos += 7;
+        doc.text(`Signature: ${document.getElementById('reportSignature').textContent}`, margin, yPos);
+        yPos += 15;
+        const pageCount = doc.internal.getNumberOfPages();
+        for (let i = 1; i <= pageCount; i++) {
+            doc.setPage(i);
+            doc.setFont('times', 'italic');
+            doc.setFontSize(10);
+            doc.setTextColor(100, 100, 100);
+            doc.text('', pageWidth / 2, pageHeight - 15, { align: 'center' });
+            doc.text(`Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        }
+        doc.save('DAS_medhub_Chest_Xray_Report.pdf');
+        showNotification('PDF report downloaded successfully!');
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        showNotification(`Error generating PDF: ${error.message}. Please try again.`, 'error');
+    } finally {
+        downloadReportBtn.innerHTML = '<i class="fas fa-download"></i> Download PDF';
+        downloadReportBtn.disabled = false;
+    }
+});
+closeReportBtn.addEventListener('click', () => {
+    reportPreview.style.display = 'none';
+    const logoElement = document.querySelector('.report-logo');
+    if (logoElement) {
+        logoElement.style.display = 'flex';
+    }
+});
+async function preprocessImage(img) {
+    const canvasTemp = document.createElement('canvas');
+    const ctxTemp = canvasTemp.getContext('2d');
+    canvasTemp.width = imgSize;
+    canvasTemp.height = imgSize;
+    const ratio = Math.min(imgSize / originalWidth, imgSize / originalHeight);
+    const newWidth = Math.round(originalWidth * ratio);
+    const newHeight = Math.round(originalHeight * ratio);
+    padLeft = (imgSize - newWidth) / 2;
+    padTop = (imgSize - newHeight) / 2;
+    scaleFactor = 1 / ratio;
+    ctxTemp.fillStyle = 'rgb(114, 114, 114)';
+    ctxTemp.fillRect(0, 0, imgSize, imgSize);
+    ctxTemp.drawImage(img, padLeft, padTop, newWidth, newHeight);
+    const imageData = ctxTemp.getImageData(0, 0, imgSize, imgSize);
+    const data = imageData.data;
+    const rgbData = new Float32Array(3 * imgSize * imgSize);
+    for (let i = 0; i < imgSize * imgSize; i++) {
+        const idx = i * 4;
+        rgbData[i] = data[idx] / 255.0;
+        rgbData[i + imgSize * imgSize] = data[idx + 1] / 255.0;
+        rgbData[i + 2 * imgSize * imgSize] = data[idx + 2] / 255.0;
+    }
+    return new ort.Tensor('float32', rgbData, [1, 3, imgSize, imgSize]);
+}
+function postprocessOutput(output) {
+    const [batch, num, dim] = output.dims;
+    const data = output.data;
+    let boxes = [];
+    for (let i = 0; i < num; i++) {
+        const offset = i * dim;
+        const x1 = data[offset + 0];
+        const y1 = data[offset + 1];
+        const x2 = data[offset + 2];
+        const y2 = data[offset + 3];
+        const conf = data[offset + 4];
+        const classId = Math.floor(data[offset + 5]);
+        if (conf < confThreshold) continue;
+        boxes.push({
+            x1: x1 - padLeft,
+            y1: y1 - padTop,
+            x2: x2 - padLeft,
+            y2: y2 - padTop,
+            score: conf,
+            classId: classId
+        });
+    }
+    return mergeRegionWise(boxes);
+}
+function mergeRegionWise(boxes) {
+    const midX = imgSize / 2;
+    const leftBoxes = boxes.filter(b => (b.x1 + b.x2) / 2 < midX);
+    const rightBoxes = boxes.filter(b => (b.x1 + b.x2) / 2 >= midX);
+    let mergedBoxes = [];
+    mergedBoxes.push(...mergeSameClassBoxes(leftBoxes));
+    mergedBoxes.push(...mergeSameClassBoxes(rightBoxes));
+    return mergedBoxes;
+}
+function mergeSameClassBoxes(boxes) {
+    const classGroups = {};
+    boxes.forEach(box => {
+        if (!classGroups[box.classId]) classGroups[box.classId] = [];
+        classGroups[box.classId].push(box);
     });
-    generateReportBtn.addEventListener('click', () => {
-        // Update step indicator
-        document.getElementById('step3').classList.remove('active');
-        document.getElementById('step3').classList.add('completed');
-        document.getElementById('step4').classList.add('active');
-        
-        // Populate report form with patient demographics
-        document.getElementById('reportPatientName').value = patientDemographics.name;
-        document.getElementById('reportPatientId').value = patientDemographics.id;
-        document.getElementById('reportPatientDob').value = patientDemographics.dob;
-        document.getElementById('reportPatientGender').value = patientDemographics.gender;
-        document.getElementById('reportPatientAge').value = patientDemographics.age;
-        
-        reportSection.style.display = 'block';
-        reportSection.scrollIntoView({ behavior: 'smooth' });
+    let mergedBoxes = [];
+    for (let classId in classGroups) {
+        const group = classGroups[classId];
+        if (group.length === 0) continue;
+        const x1 = Math.min(...group.map(b => b.x1));
+        const y1 = Math.min(...group.map(b => b.y1));
+        const x2 = Math.max(...group.map(b => b.x2));
+        const y2 = Math.max(...group.map(b => b.y2));
+        const score = Math.max(...group.map(b => b.score));
+        mergedBoxes.push({
+            x1, y1, x2, y2,
+            score,
+            classId: parseInt(classId)
+        });
+    }
+    return mergedBoxes;
+}
+function drawDetections(detections) {
+    ctx.lineWidth = 3;
+    ctx.font = 'bold 16px Arial';
+    detections.sort((a, b) => {
+        const areaA = (a.x2 - a.x1) * (a.y2 - a.y1);
+        const areaB = (b.x2 - b.x1) * (b.y2 - b.y1);
+        return areaB - areaA;
     });
-    async function generateSingleAnnotationDataURL(det) {
-        const tempCanvas = document.createElement('canvas');
-        tempCanvas.width = originalWidth;
-        tempCanvas.height = originalHeight;
-        const tempCtx = tempCanvas.getContext('2d');
-        const fullImg = new Image();
-        fullImg.src = currentImageDataURL;
-        await new Promise(resolve => { fullImg.onload = resolve; });
-        tempCtx.drawImage(fullImg, 0, 0, originalWidth, originalHeight);
-        const x1 = det.x1 * scaleFactor;
-        const y1 = det.y1 * scaleFactor;
-        const x2 = det.x2 * scaleFactor;
-        const y2 = det.y2 * scaleFactor;
+    const usedLabelPositions = [];
+    detections.forEach(det => {
+        let x1 = (det.x1 * scaleFactor) * displayRatioX;
+        let y1 = (det.y1 * scaleFactor) * displayRatioY;
+        let x2 = (det.x2 * scaleFactor) * displayRatioX;
+        let y2 = (det.y2 * scaleFactor) * displayRatioY;
         const className = classNames[det.classId];
         const label = `${className} ${(det.score * 100).toFixed(2)}%`;
         const color = classColors[className];
-        tempCtx.strokeStyle = color;
-        tempCtx.lineWidth = 4;
-        tempCtx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-        const fontSize = Math.max(16, originalWidth / 50);
-        tempCtx.font = `bold ${fontSize}px Arial`;
-        const textWidth = tempCtx.measureText(label).width;
-        const textHeight = fontSize * 1.2;
+        ctx.strokeStyle = color;
+        ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+        const textWidth = ctx.measureText(label).width;
+        const textHeight = 20;
         let labelX = x1;
         let labelY = y1 - textHeight - 5;
         if (labelY < 0) {
             labelY = y1 + textHeight + 5;
         }
-        tempCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-        roundRect(tempCtx, labelX, labelY, textWidth + 10, textHeight, 5);
-        tempCtx.fillStyle = color;
-        tempCtx.fillText(label, labelX + 5, labelY + textHeight - 5);
-        return tempCanvas.toDataURL('image/jpeg', 0.95);
-    }
-    previewReportBtn.addEventListener('click', async () => {
-        // Update report preview with patient information including age
-        document.getElementById('reportPatientNameDisplay').textContent = document.getElementById('reportPatientName').value || 'Not provided';
-        document.getElementById('reportPatientIdDisplay').textContent = document.getElementById('reportPatientId').value || 'Not provided';
-        document.getElementById('reportPatientDobDisplay').textContent = document.getElementById('reportPatientDob').value || 'Not provided';
-        document.getElementById('reportPatientGenderDisplay').textContent = document.getElementById('reportPatientGender').value || 'Not provided';
-        document.getElementById('reportPatientAgeDisplay').textContent = document.getElementById('reportPatientAge').value || 'Not provided';
-        
-        document.getElementById('reportRadiologistName').textContent = document.getElementById('radiologistName').value || 'Not provided';
-        document.getElementById('reportFacilityDisplay').textContent = document.getElementById('radiologistFacility').value || 'Not provided';
-        document.getElementById('reportRadiologistLicense').textContent = document.getElementById('radiologistLicense').value || 'Not provided';
-        document.getElementById('reportSignature').textContent = document.getElementById('radiologistSignature').value || 'Radiologist Signature';
-        const now = new Date();
-        document.getElementById('reportStudyDate').textContent = now.toLocaleDateString();
-        const findingsContainer = document.getElementById('reportFindings');
-        findingsContainer.innerHTML = '';
-        if (currentDetections.length > 0) {
-            const grid = document.createElement('div');
-            grid.className = 'conditions-grid';
-            // First, display individual findings
-            for (const det of currentDetections) {
-                const className = classNames[det.classId];
-                const color = classColors[className];
-                const confidence = (det.score * 100).toFixed(2);
-                const item = document.createElement('div');
-                item.className = 'condition-item';
-                const img = document.createElement('img');
-                img.src = await generateSingleAnnotationDataURL(det);
-                item.appendChild(img);
-                const nameEl = document.createElement('h4');
-                nameEl.style.color = color;
-                nameEl.textContent = className;
-                item.appendChild(nameEl);
-                const confP = document.createElement('p');
-                confP.textContent = `${confidence}% Confident`;
-                item.appendChild(confP);
-                const bar = document.createElement('div');
-                bar.className = 'confidence-bar';
-                const level = document.createElement('div');
-                level.className = 'confidence-level';
-                level.style.width = `${confidence}%`;
-                level.style.background = color;
-                bar.appendChild(level);
-                item.appendChild(bar);
-                grid.appendChild(item);
-            }
-            findingsContainer.appendChild(grid);
-            // Update impression based on AI analysis
-            document.getElementById('reportImpression').textContent = aiAnalysisResult ? aiAnalysisResult.impression : `The chest X-ray demonstrates ${currentDetections.length} abnormality(ies) as detailed above. Clinical correlation is advised, considering the patient's age of ${patientDemographics.age} years.`;
-            // Update recommendations based on AI analysis
-            document.getElementById('reportRecommendation').textContent = aiAnalysisResult ? aiAnalysisResult.recommendations : "Based on the findings and patient age, further evaluation with additional imaging or clinical assessment may be warranted. Follow-up as clinically indicated.";
-        } else {
-            findingsContainer.innerHTML = `
-                <div class="no-detections">
-                    <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
-                    <p>No abnormalities detected.</p>
-                </div>
-            `;
-            // Use AI analysis for negative cases too
-            document.getElementById('reportImpression').textContent = aiAnalysisResult ? aiAnalysisResult.impression : `Based on the AI analysis of the chest X-ray for this ${patientDemographics.age}-year-old ${patientDemographics.gender} patient, no significant abnormalities were detected. Clinical correlation is advised.`;
-            document.getElementById('reportRecommendation').textContent = aiAnalysisResult ? aiAnalysisResult.recommendations : "No further imaging is recommended at this time based on these findings. Follow-up as clinically indicated, considering the patient's age and clinical presentation.";
-        }
-        // Hide the logo in the preview
-        const logoElement = document.querySelector('.report-logo');
-        if (logoElement) {
-            logoElement.style.display = 'none';
-        }
-        
-        // Update step indicator
-        document.getElementById('step4').classList.remove('active');
-        document.getElementById('step4').classList.add('completed');
-        document.getElementById('step5').classList.add('active');
-        
-        reportPreview.style.display = 'block';
-        reportPreview.scrollIntoView({ behavior: 'smooth' });
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+        roundRect(ctx, labelX, labelY, textWidth + 10, textHeight, 5);
+        ctx.fillStyle = color;
+        ctx.fillText(label, labelX + 5, labelY + textHeight - 5);
+        const li = document.createElement('li');
+        li.className = 'detection-item';
+        const detectionContent = document.createElement('div');
+        detectionContent.innerHTML = `
+            <strong style="color: ${color}">${className}</strong>
+            <div class="confidence-bar">
+                <div class="confidence-level" style="width: ${det.score * 100}%; background: ${color};"></div>
+            </div>
+        `;
+        const confidencePercent = document.createElement('span');
+        confidencePercent.style.fontWeight = 'bold';
+        confidencePercent.style.color = color;
+        confidencePercent.textContent = `${(det.score * 100).toFixed(2)}%`;
+        li.appendChild(detectionContent);
+        li.appendChild(confidencePercent);
+        detectionsList.appendChild(li);
     });
-    resetReportBtn.addEventListener('click', () => {
-        document.getElementById('patientName').value = '';
-        document.getElementById('patientId').value = '';
-        document.getElementById('patientDob').value = '';
-        document.getElementById('patientGender').value = '';
-        document.getElementById('patientAge').value = '';
-        document.getElementById('radiologistName').value = '';
-        document.getElementById('radiologistLicense').value = '';
-        document.getElementById('radiologistSignature').value = '';
-        document.getElementById('additionalNotes').value = '';
-        // Restore logo visibility when resetting
-        const logoElement = document.querySelector('.report-logo');
-        if (logoElement) {
-            logoElement.style.display = 'flex';
-        }
-    });
-    printReportBtn.addEventListener('click', () => {
-        // Ensure logo is visible for printing
-        const logoElement = document.querySelector('.report-logo');
-        if (logoElement) {
-            logoElement.style.display = 'flex';
-        }
-        window.print();
-    });
-    downloadReportBtn.addEventListener('click', async () => {
-        try {
-            if (typeof window.jspdf === 'undefined') {
-                throw new Error('PDF library not loaded. Please refresh the page and try again.');
-            }
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: 'a4'
-            });
-            downloadReportBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Generating PDF...';
-            downloadReportBtn.disabled = true;
-            const pageWidth = doc.internal.pageSize.getWidth();
-            const pageHeight = doc.internal.pageSize.getHeight();
-            const margin = 15;
-            const gap = 10;
-            const columnWidth = (pageWidth - 2 * margin - gap) / 2;
-            const maxImgWidth = 50;
-            const maxImgHeight = 80;
-            let yPos = margin;
-            // Logo at top left
-            try {
-                const logo = new Image();
-                logo.src = 'dasmedhub-logo.png';
-                await new Promise(resolve => { logo.onload = resolve; });
-                doc.addImage(logo, 'PNG', margin, yPos, 40, 20);
-            } catch (error) {
-                console.warn('Could not load logo for PDF:', error);
-                doc.setFont('times', 'normal');
-                doc.setFontSize(12);
-                doc.text('DAS medhub', margin, yPos + 10);
-            }
-            // Title centered
-            doc.setFont('times', 'bold');
-            doc.setFontSize(18);
-            doc.setTextColor(40, 53, 147);
-            doc.text('Radiology Report', pageWidth / 2, yPos + 10, { align: 'center' });
-            doc.setFont('times', 'bold');
-            doc.setFontSize(11);
-            doc.setTextColor(100, 100, 100);
-            doc.text('Chest X-ray Analysis and Findings', pageWidth / 2, yPos + 18, { align: 'center' });
-            yPos += 30;
-            // Header Details (Two Columns)
-            doc.setFont('times', 'bold');
-            doc.setFontSize(12);
-            doc.text('Patient Information:', margin, yPos);
-            doc.text('Study Information:', margin + columnWidth + gap, yPos);
-            yPos += 10;
-            doc.setFont('times', 'normal');
-            doc.setFontSize(11);
-            doc.text(`Name: ${document.getElementById('reportPatientNameDisplay').textContent}`, margin, yPos);
-            doc.text(`Facility: ${document.getElementById('radiologistFacility').value || 'Not provided'}`, margin + columnWidth + gap, yPos);
-            yPos += 7;
-            doc.text(`ID: ${document.getElementById('reportPatientIdDisplay').textContent}`, margin, yPos);
-            doc.text(`Scan Type: Chest X-ray`, margin + columnWidth + gap, yPos);
-            yPos += 7;
-            doc.text(`DOB: ${document.getElementById('reportPatientDobDisplay').textContent}`, margin, yPos);
-            doc.text(`Date Processed: ${document.getElementById('reportStudyDate').textContent}`, margin + columnWidth + gap, yPos);
-            yPos += 7;
-            doc.text(`Gender: ${document.getElementById('reportPatientGenderDisplay').textContent}`, margin, yPos);
-            yPos += 7;
-            doc.text(`Age: ${document.getElementById('reportPatientAgeDisplay').textContent}`, margin, yPos);
-            yPos += 15;
-            // Radiologist Information
-            doc.setFont('times', 'bold');
-            doc.setFontSize(12);
-            doc.text('Radiologist Information:', margin, yPos);
-            yPos += 10;
-            doc.setFont('times', 'normal');
-            doc.setFontSize(11);
-            doc.text(`Name: ${document.getElementById('reportRadiologistName').textContent}`, margin, yPos);
-            yPos += 7;
-            doc.text(`License: ${document.getElementById('reportRadiologistLicense').textContent}`, margin, yPos);
-            yPos += 15;
-            // Conditions Found
-            doc.setFont('times', 'bold');
-            doc.setFontSize(12);
-            doc.text('Conditions Found:', margin, yPos);
-            yPos += 10;
-            if (currentDetections.length > 0) {
-                let xPos = margin;
-                let itemsInRow = 0;
-                let maxRowHeight = 0;
-                for (const det of currentDetections) {
-                    const className = classNames[det.classId];
-                    const confidence = (det.score * 100).toFixed(2);
-                    const color = classColors[className];
-                    const rgb = color.match(/\d+/g).map(Number);
-                    // Calculate dimensions
-                    const imgRatio = originalHeight / originalWidth;
-                    const imgWidth = columnWidth;
-                    let imgHeight = imgWidth * imgRatio;
-                    if (imgHeight > maxImgHeight) {
-                        imgHeight = maxImgHeight;
-                    }
-                    const textHeights = 7 + 7 + 10 + 5;
-                    const itemHeight = imgHeight + textHeights + 10;
-                    // Check if we need a new page
-                    if (yPos + itemHeight > pageHeight - margin) {
-                        doc.addPage();
-                        yPos = margin;
-                        xPos = margin;
-                        itemsInRow = 0;
-                        maxRowHeight = 0;
-                    }
-                    // Track the maximum height in the current row
-                    maxRowHeight = Math.max(maxRowHeight, itemHeight);
-                    // Add image
-                    const url = await generateSingleAnnotationDataURL(det);
-                    doc.addImage(url, 'JPEG', xPos, yPos, imgWidth, imgHeight);
-                    // Add text and confidence bar below image
-                    let textY = yPos + imgHeight + 5;
-                    doc.setFont('times', 'bold');
-                    doc.setFontSize(11);
-                    doc.setTextColor(rgb[0], rgb[1], rgb[2]);
-                    doc.text(className, xPos, textY);
-                    textY += 7;
-                    doc.setFont('times', 'normal');
-                    doc.setTextColor(0, 0, 0);
-                    doc.text(`${confidence}% Confident`, xPos, textY);
-                    textY += 7;
-                    // Confidence bar background
-                    doc.setFillColor(221, 221, 221);
-                    doc.roundedRect(xPos, textY, columnWidth, 4, 2, 2, 'F');
-                    // Confidence level
-                    doc.setFillColor(rgb[0], rgb[1], rgb[2]);
-                    doc.roundedRect(xPos, textY, (confidence / 100) * columnWidth, 4, 2, 2, 'F');
-                    textY += 10;
-                    itemsInRow++;
-                    if (itemsInRow === 2) {
-                        yPos += maxRowHeight + 10;
-                        xPos = margin;
-                        itemsInRow = 0;
-                        maxRowHeight = 0;
-                    } else {
-                        xPos += columnWidth + gap;
-                    }
-                }
-                // Move yPos after the last row
-                if (itemsInRow === 1) {
-                    yPos += maxRowHeight + 10;
-                }
-            } else {
-                doc.setFont('times', 'normal');
-                doc.setFontSize(11);
-                doc.text('No abnormalities detected.', margin, yPos);
-                yPos += 15;
-            }
-            if (yPos > pageHeight - 50) {
-                doc.addPage();
-                yPos = margin;
-            }
-            // Impression (already included in AI analysis, but keeping for consistency)
-            doc.setFont('times', 'bold');
-            doc.setFontSize(12);
-            doc.text('Impression:', margin, yPos);
-            yPos += 10;
-            doc.setFont('times', 'normal');
-            doc.setFontSize(11);
-            const impression = document.getElementById('reportImpression').textContent;
-            const splitImpression = doc.splitTextToSize(impression, pageWidth - 2 * margin);
-            doc.text(splitImpression, margin, yPos);
-            yPos += (splitImpression.length * 7) + 15;
-            if (yPos > pageHeight - 50) {
-                doc.addPage();
-                yPos = margin;
-            }
-            // Recommendation (already included in AI analysis, but keeping for consistency)
-            doc.setFont('times', 'bold');
-            doc.setFontSize(12);
-            doc.text('Recommendation:', margin, yPos);
-            yPos += 10;
-            doc.setFont('times', 'normal');
-            doc.setFontSize(11);
-            const recommendation = document.getElementById('reportRecommendation').textContent;
-            const splitRecommendation = doc.splitTextToSize(recommendation, pageWidth - 2 * margin);
-            doc.text(splitRecommendation, margin, yPos);
-            yPos += (splitRecommendation.length * 7) + 15;
-            // Additional Notes
-            const additionalNotes = document.getElementById('additionalNotes').value;
-            if (additionalNotes) {
-                if (yPos > pageHeight - 50) {
-                    doc.addPage();
-                    yPos = margin;
-                }
-                doc.setFont('times', 'bold');
-                doc.setFontSize(12);
-                doc.text('Additional Notes:', margin, yPos);
-                yPos += 10;
-                doc.setFont('times', 'normal');
-                doc.setFontSize(11);
-                const splitNotes = doc.splitTextToSize(additionalNotes, pageWidth - 2 * margin);
-                doc.text(splitNotes, margin, yPos);
-                yPos += (splitNotes.length * 7) + 15;
-            }
-            if (yPos > pageHeight - 50) {
-                doc.addPage();
-                yPos = margin;
-            }
-            // Radiologist Signature
-            doc.setFont('times', 'bold');
-            doc.setFontSize(12);
-            doc.text('Radiologist:', margin, yPos);
-            yPos += 10;
-            doc.setFont('times', 'normal');
-            doc.setFontSize(11);
-            doc.text(`Name: ${document.getElementById('reportRadiologistName').textContent}`, margin, yPos);
-            yPos += 7;
-            doc.text(`License: ${document.getElementById('reportRadiologistLicense').textContent}`, margin, yPos);
-            yPos += 7;
-            doc.text(`Signature: ${document.getElementById('reportSignature').textContent}`, margin, yPos);
-            yPos += 15;
-            // Footer
-            const pageCount = doc.internal.getNumberOfPages();
-            for (let i = 1; i <= pageCount; i++) {
-                doc.setPage(i);
-                doc.setFont('times', 'italic');
-                doc.setFontSize(10);
-                doc.setTextColor(100, 100, 100);
-                doc.text('', pageWidth / 2, pageHeight - 15, { align: 'center' });
-                doc.text(`Page ${i} of ${pageCount}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-            }
-            doc.save('DAS_medhub_Chest_Xray_Report.pdf');
-            showNotification('PDF report downloaded successfully!');
-        } catch (error) {
-            console.error('Error generating PDF:', error);
-            showNotification(`Error generating PDF: ${error.message}. Please try again.`, 'error');
-        } finally {
-            downloadReportBtn.innerHTML = '<i class="fas fa-download"></i> Download PDF';
-            downloadReportBtn.disabled = false;
-        }
-    });
-    closeReportBtn.addEventListener('click', () => {
-        reportPreview.style.display = 'none';
-        // Restore logo visibility when closing
-        const logoElement = document.querySelector('.report-logo');
-        if (logoElement) {
-            logoElement.style.display = 'flex';
-        }
-    });
-    async function preprocessImage(img) {
-        const canvasTemp = document.createElement('canvas');
-        const ctxTemp = canvasTemp.getContext('2d');
-        canvasTemp.width = imgSize;
-        canvasTemp.height = imgSize;
-        const ratio = Math.min(imgSize / originalWidth, imgSize / originalHeight);
-        const newWidth = Math.round(originalWidth * ratio);
-        const newHeight = Math.round(originalHeight * ratio);
-        padLeft = (imgSize - newWidth) / 2;
-        padTop = (imgSize - newHeight) / 2;
-        scaleFactor = 1 / ratio;
-        ctxTemp.fillStyle = 'rgb(114, 114, 114)';
-        ctxTemp.fillRect(0, 0, imgSize, imgSize);
-        ctxTemp.drawImage(img, padLeft, padTop, newWidth, newHeight);
-        const imageData = ctxTemp.getImageData(0, 0, imgSize, imgSize);
-        const data = imageData.data;
-        const rgbData = new Float32Array(3 * imgSize * imgSize);
-        for (let i = 0; i < imgSize * imgSize; i++) {
-            const idx = i * 4;
-            rgbData[i] = data[idx] / 255.0;
-            rgbData[i + imgSize * imgSize] = data[idx + 1] / 255.0;
-            rgbData[i + 2 * imgSize * imgSize] = data[idx + 2] / 255.0;
-        }
-        return new ort.Tensor('float32', rgbData, [1, 3, imgSize, imgSize]);
+    if (detections.length === 0) {
+        const noResults = document.createElement('div');
+        noResults.className = 'no-detections';
+        noResults.innerHTML = `
+            <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
+            <p>No abnormalities detected.</p>
+        `;
+        detectionsList.appendChild(noResults);
     }
-    function postprocessOutput(output) {
-        const [batch, num, dim] = output.dims;
-        const data = output.data;
-        let boxes = [];
-        for (let i = 0; i < num; i++) {
-            const offset = i * dim;
-            const x1 = data[offset + 0];
-            const y1 = data[offset + 1];
-            const x2 = data[offset + 2];
-            const y2 = data[offset + 3];
-            const conf = data[offset + 4];
-            const classId = Math.floor(data[offset + 5]);
-            if (conf < confThreshold) continue;
-            boxes.push({
-                x1: x1 - padLeft,
-                y1: y1 - padTop,
-                x2: x2 - padLeft,
-                y2: y2 - padTop,
-                score: conf,
-                classId: classId
-            });
-        }
-        return mergeRegionWise(boxes);
-    }
-    function mergeRegionWise(boxes) {
-        const midX = imgSize / 2;
-        const leftBoxes = boxes.filter(b => (b.x1 + b.x2) / 2 < midX);
-        const rightBoxes = boxes.filter(b => (b.x1 + b.x2) / 2 >= midX);
-        let mergedBoxes = [];
-        mergedBoxes.push(...mergeSameClassBoxes(leftBoxes));
-        mergedBoxes.push(...mergeSameClassBoxes(rightBoxes));
-        return mergedBoxes;
-    }
-    function mergeSameClassBoxes(boxes) {
-        const classGroups = {};
-        boxes.forEach(box => {
-            if (!classGroups[box.classId]) classGroups[box.classId] = [];
-            classGroups[box.classId].push(box);
-        });
-        let mergedBoxes = [];
-        for (let classId in classGroups) {
-            const group = classGroups[classId];
-            if (group.length === 0) continue;
-            const x1 = Math.min(...group.map(b => b.x1));
-            const y1 = Math.min(...group.map(b => b.y1));
-            const x2 = Math.max(...group.map(b => b.x2));
-            const y2 = Math.max(...group.map(b => b.y2));
-            const score = Math.max(...group.map(b => b.score));
-            mergedBoxes.push({
-                x1, y1, x2, y2,
-                score,
-                classId: parseInt(classId)
-            });
-        }
-        return mergedBoxes;
-    }
-    function drawDetections(detections) {
-        ctx.lineWidth = 3;
-        ctx.font = 'bold 16px Arial';
-        detections.sort((a, b) => {
-            const areaA = (a.x2 - a.x1) * (a.y2 - a.y1);
-            const areaB = (b.x2 - b.x1) * (b.y2 - b.y1);
-            return areaB - areaA;
-        });
-        const usedLabelPositions = [];
+}
+function roundRect(ctx, x, y, width, height, radius) {
+    if (width < 2 * radius) radius = width / 2;
+    if (height < 2 * radius) radius = height / 2;
+    ctx.beginPath();
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
+    ctx.fill();
+}
+function updateStats(detections) {
+    totalFindings.textContent = detections.length;
+    if (detections.length > 0) {
+        const highest = Math.max(...detections.map(d => d.score));
+        highestConfidence.textContent = `${(highest * 100).toFixed(2)}%`;
+        const classCounts = {};
         detections.forEach(det => {
-            let x1 = (det.x1 * scaleFactor) * displayRatioX;
-            let y1 = (det.y1 * scaleFactor) * displayRatioY;
-            let x2 = (det.x2 * scaleFactor) * displayRatioX;
-            let y2 = (det.y2 * scaleFactor) * displayRatioY;
             const className = classNames[det.classId];
-            const label = `${className} ${(det.score * 100).toFixed(2)}%`;
-            const color = classColors[className];
-            ctx.strokeStyle = color;
-            ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
-            const textWidth = ctx.measureText(label).width;
-            const textHeight = 20;
-            let labelX = x1;
-            let labelY = y1 - textHeight - 5;
-            if (labelY < 0) {
-                labelY = y1 + textHeight + 5;
-            }
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-            roundRect(ctx, labelX, labelY, textWidth + 10, textHeight, 5);
-            ctx.fillStyle = color;
-            ctx.fillText(label, labelX + 5, labelY + textHeight - 5);
-            const li = document.createElement('li');
-            li.className = 'detection-item';
-            const detectionContent = document.createElement('div');
-            detectionContent.innerHTML = `
-                <strong style="color: ${color}">${className}</strong>
-                <div class="confidence-bar">
-                    <div class="confidence-level" style="width: ${det.score * 100}%; background: ${color};"></div>
-                </div>
-            `;
-            const confidencePercent = document.createElement('span');
-            confidencePercent.style.fontWeight = 'bold';
-            confidencePercent.style.color = color;
-            confidencePercent.textContent = `${(det.score * 100).toFixed(2)}%`;
-            li.appendChild(detectionContent);
-            li.appendChild(confidencePercent);
-            detectionsList.appendChild(li);
+            classCounts[className] = (classCounts[className] || 0) + 1;
         });
-        if (detections.length === 0) {
-            const noResults = document.createElement('div');
-            noResults.className = 'no-detections';
-            noResults.innerHTML = `
-                <i class="fas fa-check-circle" style="font-size: 3rem; color: var(--success); margin-bottom: 15px;"></i>
-                <p>No abnormalities detected.</p>
-            `;
-            detectionsList.appendChild(noResults);
-        }
-    }
-    function roundRect(ctx, x, y, width, height, radius) {
-        if (width < 2 * radius) radius = width / 2;
-        if (height < 2 * radius) radius = height / 2;
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.lineTo(x + width - radius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        ctx.lineTo(x + width, y + height - radius);
-        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        ctx.lineTo(x + radius, y + height);
-        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-        ctx.closePath();
-        ctx.fill();
-    }
-    function updateStats(detections) {
-        totalFindings.textContent = detections.length;
-        if (detections.length > 0) {
-            const highest = Math.max(...detections.map(d => d.score));
-            highestConfidence.textContent = `${(highest * 100).toFixed(2)}%`;
-            const classCounts = {};
-            detections.forEach(det => {
-                const className = classNames[det.classId];
-                classCounts[className] = (classCounts[className] || 0) + 1;
-            });
-            let mostCommonFinding = '-';
-            let maxCount = 0;
-            for (const className in classCounts) {
-                if (classCounts[className] > maxCount) {
-                    mostCommonFinding = className;
-                    maxCount = classCounts[className];
-                }
+        let mostCommonFinding = '-';
+        let maxCount = 0;
+        for (const className in classCounts) {
+            if (classCounts[className] > maxCount) {
+                mostCommonFinding = className;
+                maxCount = classCounts[className];
             }
-            mostCommon.textContent = mostCommonFinding;
-        } else {
-            highestConfidence.textContent = '0%';
-            mostCommon.textContent = '-';
         }
+        mostCommon.textContent = mostCommonFinding;
+    } else {
+        highestConfidence.textContent = '0%';
+        mostCommon.textContent = '-';
     }
+}
 </script>
 </body>
 </html>
-
-
