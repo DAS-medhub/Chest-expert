@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chest X-ray Abnormality Detection | DAS medhub</title>
     <script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.18.0/dist/ort.min.js"></script>
+    <script src="https://unpkg.com/dicom-parser@1.8.5/dist/dicomParser.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
@@ -809,8 +810,221 @@
         .age-context-alert i {
             margin-right: 8px;
         }
+        /* History Section */
+        .history-section {
+            margin-top: 40px;
+            display: none;
+        }
+        .history-item {
+            background: white;
+            border-radius: var(--radius-sm);
+            padding: 20px;
+            margin-bottom: 15px;
+            box-shadow: var(--shadow);
+            border-left: 4px solid var(--primary);
+            cursor: pointer;
+            transition: var(--transition);
+            position: relative;
+        }
+        .history-item:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-md);
+        }
+        .history-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        .history-title {
+            font-weight: 600;
+            color: var(--secondary);
+            font-size: 1.1rem;
+        }
+        .history-date {
+            color: var(--gray-dark);
+            font-size: 0.9rem;
+        }
+        .history-patient-info {
+            color: var(--gray-dark);
+            margin-bottom: 10px;
+            font-size: 0.9rem;
+        }
+        .history-findings {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .history-finding-tag {
+            background: var(--light);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            color: var(--primary);
+        }
+        .history-emergency {
+            background: var(--accent);
+            color: white;
+        }
+        .view-history-btn {
+            margin-top: 20px;
+            width: 100%;
+        }
+        .dicom-info {
+            background: #f0f9ff;
+            padding: 15px;
+            border-radius: var(--radius-sm);
+            margin: 15px 0;
+            border: 1px solid #bae6fd;
+        }
+        .dicom-info h4 {
+            margin-bottom: 10px;
+            color: var(--primary);
+            font-size: 1rem;
+        }
+        .dicom-meta {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            font-size: 0.9rem;
+        }
+        @media (max-width: 768px) {
+            .dicom-meta {
+                grid-template-columns: 1fr;
+            }
+        }
+        /* Delete button for history items */
+        .delete-history-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            transition: var(--transition);
+        }
+        .delete-history-btn:hover {
+            background: #dc2626;
+            transform: scale(1.1);
+        }
+        /* Clear all history button */
+        .clear-history-btn {
+            margin-top: 20px;
+            width: 100%;
+            background: var(--accent);
+        }
+        .clear-history-btn:hover {
+            background: #dc2626;
+        }
+
+        /*new delete */
+        .custom-modal {
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    overflow: auto;
+    background-color: rgba(0,0,0,0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.custom-modal-content {
+    background-color: #fefefe;
+    margin: auto;
+    padding: 0;
+    border: 1px solid #888;
+    border-radius: var(--radius-sm);
+    width: 90%;
+    max-width: 500px;
+    box-shadow: var(--shadow-md);
+    animation: fadeIn 0.3s ease;
+}
+
+.custom-modal-header {
+    padding: 20px 20px 15px;
+    background: var(--primary);
+    color: white;
+    border-top-left-radius: var(--radius-sm);
+    border-top-right-radius: var(--radius-sm);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.custom-modal-header h3 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.custom-modal-close {
+    color: white;
+    float: right;
+    font-size: 28px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.custom-modal-close:hover {
+    color: #ccc;
+}
+
+.custom-modal-body {
+    padding: 30px 20px;
+    text-align: center;
+}
+
+.custom-modal-body p {
+    margin: 0;
+    font-size: 1.1rem;
+    color: var(--dark);
+}
+
+.custom-modal-footer {
+    padding: 15px 20px 20px;
+    text-align: right;
+    border-top: 1px solid #eee;
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+}
+
+.btn-secondary {
+    background: #6c757d;
+    color: white;
+}
+
+.btn-secondary:hover {
+    background: #5a6268;
+}
+
+.btn-danger {
+    background: var(--accent);
+    color: white;
+}
+
+.btn-danger:hover {
+    background: #dc2626;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.95); }
+    to { opacity: 1; transform: scale(1); }
+}
     </style>
-</head>
+ </head>
 <body>
 <div class="container">
     <!-- Step Indicator -->
@@ -894,8 +1108,12 @@
             <i class="fas fa-file-medical-alt"></i>
             <p class="upload-text"><strong>Drag & drop</strong> your chest X-ray image here or <strong>click to browse</strong></p>
             <p style="font-size: 0.9rem; color: var(--gray-dark); margin-top: 10px;">Supported formats: JPG, PNG, DICOM</p>
-            <input type="file" id="imageUpload" accept="image/*" class="file-input">
+            <input type="file" id="imageUpload" accept=".jpg,.jpeg,.png,.dcm,.dicom" class="file-input">
             <label for="imageUpload" class="file-label"><i class="fas fa-cloud-upload-alt"></i> Choose File</label>
+        </div>
+        <div class="dicom-info" id="dicomInfo" style="display: none;">
+            <h4><i class="fas fa-info-circle"></i> DICOM File Information</h4>
+            <div class="dicom-meta" id="dicomMeta"></div>
         </div>
         <div class="preview-container" id="previewContainer">
             <img id="preview" src="" alt="Uploaded X-ray Image">
@@ -996,9 +1214,9 @@
                     <input type="text" class="form-input" id="radiologistName" placeholder="Full name">
                 </div>
                 <div class="form-group">
-    <label class="form-label">Facility Name</label>
-    <input type="text" class="form-input" id="radiologistFacility" placeholder="Hospital or Clinic Name">
-</div>
+                    <label class="form-label">Facility Name</label>
+                    <input type="text" class="form-input" id="radiologistFacility" placeholder="Hospital or Clinic Name">
+                </div>
                 <div class="form-group">
                     <label class="form-label">License Number</label>
                     <input type="text" class="form-input" id="radiologistLicense" placeholder="Medical license number">
@@ -1058,10 +1276,10 @@
             </div>
             <div class="right-column">
                 <h3 class="report-section-title">Study Information</h3>
-<div class="info-item">
-    <div class="info-label">Facility</div>
-    <div class="info-value" id="reportFacilityDisplay">-</div>
-</div>
+                <div class="info-item">
+                    <div class="info-label">Facility</div>
+                    <div class="info-value" id="reportFacilityDisplay">-</div>
+                </div>
                 <div class="info-item">
                     <div class="info-label">Scan Type</div>
                     <div class="info-value">Chest X-ray</div>
@@ -1069,6 +1287,10 @@
                 <div class="info-item">
                     <div class="info-label">Date Processed</div>
                     <div class="info-value" id="reportStudyDate">-</div>
+                </div>
+                <div class="info-item" id="dicomStudyInfo" style="display: none;">
+                    <div class="info-label">DICOM Study</div>
+                    <div class="info-value" id="dicomStudyValue">-</div>
                 </div>
             </div>
         </div>
@@ -1116,6 +1338,40 @@
                     <i class="fas fa-times"></i> Close Preview
                 </button>
             </div>
+        </div>
+    </div>
+    <!-- History Section -->
+    <div class="card history-section" id="historySection">
+        <h2 class="card-title"><i class="fas fa-history"></i> Analysis History</h2>
+        <div id="historyList">
+            <!-- History items will be added here dynamically -->
+            <div class="no-detections" id="noHistoryMessage">
+                <i class="fas fa-history" style="font-size: 3rem; color: var(--gray-dark); margin-bottom: 15px;"></i>
+                <p>No analysis history found. Complete an analysis to see it here.</p>
+            </div>
+        </div>
+        <button id="clearHistoryBtn" class="btn clear-history-btn" style="display: none;">
+            <i class="fas fa-trash"></i> Clear All History
+        </button>
+    </div>
+    <button id="viewHistoryBtn" class="btn btn-primary view-history-btn" style="display: none;">
+        <i class="fas fa-history"></i> View Analysis History
+    </button>
+</div>
+
+<!-- Custom Confirm Modal -->
+<div id="customConfirmModal" class="custom-modal" style="display: none;">
+    <div class="custom-modal-content">
+        <div class="custom-modal-header">
+            <h3>Confirm Action</h3>
+            <span class="custom-modal-close">&times;</span>
+        </div>
+        <div class="custom-modal-body">
+            <p id="customConfirmMessage">Are you sure you want to proceed?</p>
+        </div>
+        <div class="custom-modal-footer">
+            <button id="customConfirmCancel" class="btn btn-secondary">Cancel</button>
+            <button id="customConfirmOK" class="btn btn-danger">Delete</button>
         </div>
     </div>
 </div>
@@ -1197,6 +1453,211 @@ let patientDemographics = {
     dob: '',
     id: ''
 };
+let dicomMetadata = null;
+let analysisHistory = [];
+// Initialize history from localStorage
+function loadHistory() {
+    const savedHistory = localStorage.getItem('chestXrayAnalysisHistory');
+    if (savedHistory) {
+        try {
+            analysisHistory = JSON.parse(savedHistory);
+            displayHistory();
+        } catch (error) {
+            console.error('Error parsing history:', error);
+            analysisHistory = [];
+            localStorage.removeItem('chestXrayAnalysisHistory');
+        }
+    }
+}
+// Save history to localStorage
+function saveHistory() {
+    localStorage.setItem('chestXrayAnalysisHistory', JSON.stringify(analysisHistory));
+}
+// Display history in the UI
+function displayHistory() {
+    const historyList = document.getElementById('historyList');
+    const noHistoryMessage = document.getElementById('noHistoryMessage');
+    const viewHistoryBtn = document.getElementById('viewHistoryBtn');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    if (analysisHistory.length === 0) {
+        noHistoryMessage.style.display = 'block';
+        historyList.innerHTML = '';
+        viewHistoryBtn.style.display = 'none';
+        clearHistoryBtn.style.display = 'none';
+        return;
+    }
+    noHistoryMessage.style.display = 'none';
+    viewHistoryBtn.style.display = 'block';
+    clearHistoryBtn.style.display = 'block';
+    historyList.innerHTML = '';
+    analysisHistory.slice().reverse().forEach((item, index) => {
+        const historyItem = document.createElement('div');
+        historyItem.className = 'history-item';
+        historyItem.dataset.index = analysisHistory.length - 1 - index; // Reverse index
+        const date = new Date(item.timestamp);
+        const formattedDate = `${date.toLocaleDateString()} ${date.toLocaleTimeString()}`;
+        let findingsHtml = '';
+        if (item.detections && item.detections.length > 0) {
+            findingsHtml = '<div class="history-findings">';
+            item.detections.forEach(det => {
+                const className = classNames[det.classId];
+                const isEmergency = item.aiAnalysis && item.aiAnalysis.findings && 
+                    item.aiAnalysis.findings.some(f => f.name === className && f.emergency);
+                const findingClass = isEmergency ? 'history-finding-tag history-emergency' : 'history-finding-tag';
+                findingsHtml += `<span class="${findingClass}">${className}</span>`;
+            });
+            findingsHtml += '</div>';
+        } else {
+            findingsHtml = '<p style="color: var(--success); font-weight: 500;">No abnormalities detected</p>';
+        }
+        // Create delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'delete-history-btn';
+        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+        deleteBtn.title = 'Delete this analysis';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteHistoryItem(analysisHistory.length - 1 - index);
+        });
+        historyItem.innerHTML = `
+            <div class="history-header">
+                <div class="history-title">${item.patientName || 'Unknown Patient'}</div>
+                <div class="history-date">${formattedDate}</div>
+            </div>
+            <div class="history-patient-info">
+                Age: ${item.patientAge || 'N/A'} | Gender: ${item.patientGender || 'N/A'} | ID: ${item.patientId || 'N/A'}
+            </div>
+            ${findingsHtml}
+        `;
+        historyItem.appendChild(deleteBtn);
+        historyItem.addEventListener('click', () => {
+            loadHistoryItem(analysisHistory.length - 1 - index);
+        });
+        historyList.appendChild(historyItem);
+    });
+}
+// Delete a specific history item
+function deleteHistoryItem(index) {
+    showCustomConfirm(
+    'Are you sure you want to delete this analysis from history?',
+    () => {
+        analysisHistory.splice(index, 1);
+        saveHistory();
+        displayHistory();
+        showNotification('Analysis deleted from history successfully!', 'success');
+    }
+);
+}
+// Clear all history
+function clearAllHistory() {
+    showCustomConfirm(
+    'Are you sure you want to delete all analysis history? This action cannot be undone.',
+    () => {
+        analysisHistory = [];
+        saveHistory();
+        displayHistory();
+        showNotification('All analysis history has been cleared!', 'success');
+    },
+    'Clear All History',
+    'Clear All',
+    'btn-danger'
+);
+}
+// Load a specific history item
+function loadHistoryItem(index) {
+    const item = analysisHistory[index];
+    if (!item) return;
+    // Restore patient demographics
+    patientDemographics = {
+        name: item.patientName || '',
+        age: item.patientAge || null,
+        gender: item.patientGender || '',
+        dob: item.patientDob || '',
+        id: item.patientId || ''
+    };
+    // Update patient info fields
+    document.getElementById('patientName').value = patientDemographics.name;
+    document.getElementById('patientAge').value = patientDemographics.age;
+    document.getElementById('patientGender').value = patientDemographics.gender;
+    document.getElementById('patientDob').value = patientDemographics.dob;
+    document.getElementById('patientId').value = patientDemographics.id;
+    // Update report fields
+    document.getElementById('reportPatientName').value = patientDemographics.name;
+    document.getElementById('reportPatientAge').value = patientDemographics.age;
+    document.getElementById('reportPatientGender').value = patientDemographics.gender;
+    document.getElementById('reportPatientDob').value = patientDemographics.dob;
+    document.getElementById('reportPatientId').value = patientDemographics.id;
+    // Restore detections
+    currentDetections = item.detections || [];
+    // Restore AI analysis
+    aiAnalysisResult = item.aiAnalysis || null;
+    // Restore image
+    if (item.imageData) {
+        currentImageDataURL = item.imageData;
+        preview.src = currentImageDataURL;
+        preview.onload = () => {
+            originalWidth = preview.naturalWidth;
+            originalHeight = preview.naturalHeight;
+            canvas.width = preview.width;
+            canvas.height = preview.height;
+            displayRatioX = preview.width / originalWidth;
+            displayRatioY = preview.height / originalHeight;
+            predictBtn.disabled = !session;
+            previewContainer.style.display = 'block';
+            
+            // Recalculate scaling factors for proper detection drawing
+            const ratio = Math.min(imgSize / originalWidth, imgSize / originalHeight);
+            scaleFactor = 1 / ratio;
+            padLeft = (imgSize - Math.round(originalWidth * ratio)) / 2;
+            padTop = (imgSize - Math.round(originalHeight * ratio)) / 2;
+            
+            // Clear canvas and draw detections
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawDetections(currentDetections);
+            updateStats(currentDetections);
+            
+            // Display AI analysis
+            if (aiAnalysisResult) {
+                displayAIAnalysis(aiAnalysisResult);
+            }
+            
+            // Enable report button
+            generateReportBtn.disabled = false;
+            
+            // Show results section
+            document.getElementById('patientInfoCard').style.display = 'none';
+            document.getElementById('uploadCard').style.display = 'block';
+            document.getElementById('step1').classList.remove('active');
+            document.getElementById('step1').classList.add('completed');
+            document.getElementById('step2').classList.remove('active');
+            document.getElementById('step2').classList.add('completed');
+            document.getElementById('step3').classList.remove('active');
+            document.getElementById('step3').classList.add('completed');
+            document.getElementById('step4').classList.add('active');
+            
+            // Scroll to results
+            document.querySelector('.results-section').scrollIntoView({ behavior: 'smooth' });
+        };
+    }
+}
+// Add current analysis to history
+function addToHistory() {
+    const historyItem = {
+        timestamp: Date.now(),
+        patientName: patientDemographics.name,
+        patientAge: patientDemographics.age,
+        patientGender: patientDemographics.gender,
+        patientDob: patientDemographics.dob,
+        patientId: patientDemographics.id,
+        detections: [...currentDetections],
+        aiAnalysis: aiAnalysisResult ? { ...aiAnalysisResult } : null,
+        imageData: currentImageDataURL,
+        dicomMetadata: dicomMetadata ? { ...dicomMetadata } : null
+    };
+    analysisHistory.push(historyItem);
+    saveHistory();
+    displayHistory();
+}
 // IndexedDB setup
 function openDB() {
     return new Promise((resolve, reject) => {
@@ -1215,7 +1676,7 @@ async function saveModelToCache(modelData) {
         const tx = db.transaction([modelCacheStore], 'readwrite');
         const store = tx.objectStore(modelCacheStore);
         await new Promise((resolve, reject) => {
-            const request = store.put({ id: modelCacheKey, data: modelData });
+            const request = store.put({ id: modelCacheKey, modelData });
             request.onsuccess = resolve;
             request.onerror = reject;
         });
@@ -1234,7 +1695,7 @@ async function getCachedModel() {
             req.onsuccess = () => resolve(req.result);
             req.onerror = reject;
         });
-        return request ? request.data : null;
+        return request ? request.modelData : null;
     } catch (error) {
         console.error('Error retrieving cached model:', error);
         return null;
@@ -1286,8 +1747,9 @@ async function loadModel() {
         }, 3000);
     }
 }
-// Initialize model loading
+// Initialize model loading and history
 loadModel();
+loadHistory();
 // Function to calculate age from DOB
 function calculateAge(dobString) {
     if (!dobString) return null;
@@ -1524,12 +1986,12 @@ function displayAIAnalysis(analysis) {
         ageContextAlert.style.display = 'none';
     }
     const impressionDiv = document.createElement('div');
-    impressionDiv.innerHTML = `<strong>Impression:</strong><br>${analysis.impression.replace('<br>')}`;
+    impressionDiv.innerHTML = `<strong>Impression:</strong><br>${analysis.impression.replace('/n', '<br>')}`;
     aiAnalysisContent.appendChild(impressionDiv);
     aiAnalysisContent.appendChild(document.createElement('br'));
     aiAnalysisContent.appendChild(document.createElement('br'));
     const recommendationsDiv = document.createElement('div');
-    recommendationsDiv.innerHTML = `<strong>Recommendations:</strong><br>${analysis.recommendations.replace( '<br>')}`;
+    recommendationsDiv.innerHTML = `<strong>Recommendations:</strong><br>${analysis.recommendations.replace('/n', '<br>')}`;
     aiAnalysisContent.appendChild(recommendationsDiv);
     if (analysis.findings && analysis.findings.length > 0) {
         aiAnalysisContent.appendChild(document.createElement('br'));
@@ -1545,8 +2007,8 @@ function displayAIAnalysis(analysis) {
             findingItem.style.marginBottom = '10px';
             let findingHTML = `<strong>${finding.name}:</strong><br>`;
             findingHTML += `<span style="color: ${finding.emergency ? '#e63946' : 'inherit'}">${finding.diagnosis}</span><br>`;
-            findingHTML += `<em>Differentials:</em><br>${finding.differentials.replace('\n' ,'<br>')}<br>`;
-            findingHTML += `<em>${finding.context.replace( '\n','<br>')}</em>`;
+            findingHTML += `<em>Differentials:</em><br>${finding.differentials.replace('/n', '<br>')}<br>`;
+            findingHTML += `<em>${finding.context.replace('/n', '<br>')}</em>`;
             if (finding.emergency) {
                 findingHTML += ` <span class="emergency-badge">EMERGENCY</span>`;
             }
@@ -1589,6 +2051,68 @@ const downloadReportBtn = document.getElementById('downloadReportBtn');
 const closeReportBtn = document.getElementById('closeReportBtn');
 const aiAnalysisSection = document.getElementById('aiAnalysisSection');
 const ageContextAlert = document.getElementById('ageContextAlert');
+const dicomInfo = document.getElementById('dicomInfo');
+const dicomMeta = document.getElementById('dicomMeta');
+const historySection = document.getElementById('historySection');
+const viewHistoryBtn = document.getElementById('viewHistoryBtn');
+const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+function showCustomConfirm(message, onConfirm, title = "Confirm Action", confirmText = "Delete", confirmClass = "btn-danger") {
+    const modal = document.getElementById('customConfirmModal');
+    const messageEl = document.getElementById('customConfirmMessage');
+    const titleEl = modal.querySelector('.custom-modal-header h3');
+    const okBtn = document.getElementById('customConfirmOK');
+    const cancelBtn = document.getElementById('customConfirmCancel');
+    const closeBtn = modal.querySelector('.custom-modal-close');
+
+    // Set content
+    messageEl.textContent = message;
+    titleEl.textContent = title;
+    okBtn.textContent = confirmText;
+    okBtn.className = `btn ${confirmClass}`;
+
+    // Show modal
+    modal.style.display = 'flex';
+
+    // Handle OK
+    const handleOK = () => {
+        modal.style.display = 'none';
+        if (typeof onConfirm === 'function') onConfirm();
+    };
+
+    // Handle Cancel
+    const handleCancel = () => {
+        modal.style.display = 'none';
+    };
+
+    // Bind events
+    okBtn.onclick = handleOK;
+    cancelBtn.onclick = handleCancel;
+    closeBtn.onclick = handleCancel;
+
+    // Close on outside click
+    window.onclick = function(event) {
+        if (event.target === modal) {
+            handleCancel();
+        }
+    };
+
+    // Prevent body scroll
+    document.body.style.overflow = 'hidden';
+
+    // Cleanup on close
+    const cleanup = () => {
+        okBtn.onclick = null;
+        cancelBtn.onclick = null;
+        closeBtn.onclick = null;
+        window.onclick = null;
+        document.body.style.overflow = '';
+    };
+
+    // Attach cleanup to buttons
+    okBtn.addEventListener('click', cleanup, { once: true });
+    cancelBtn.addEventListener('click', cleanup, { once: true });
+    closeBtn.addEventListener('click', cleanup, { once: true });
+}
 function showNotification(message, type = 'success') {
     const notification = document.createElement('div');
     notification.className = `notification ${type} active`;
@@ -1623,37 +2147,267 @@ uploadArea.addEventListener('drop', (e) => {
 uploadArea.addEventListener('click', () => {
     imageUpload.click();
 });
+// Function to process DICOM files with improved error handling and proper resizing
+async function processDicomFile(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = function(event) {
+            try {
+                const arrayBuffer = event.target.result;
+                const byteArray = new Uint8Array(arrayBuffer);
+                // Parse the DICOM file
+                const dataSet = dicomParser.parseDicom(byteArray);
+                // Extract metadata
+                dicomMetadata = {
+                    patientName: dataSet.string('x00100010') || 'Unknown',
+                    patientID: dataSet.string('x00100020') || 'Unknown',
+                    patientBirthDate: dataSet.string('x00100030') || '',
+                    patientSex: dataSet.string('x00100040') || '',
+                    studyDate: dataSet.string('x00080020') || '',
+                    studyTime: dataSet.string('x00080030') || '',
+                    modality: dataSet.string('x00080060') || '',
+                    studyDescription: dataSet.string('x00081030') || '',
+                    seriesDescription: dataSet.string('x0008103E') || '',
+                    institutionName: dataSet.string('x00080080') || '',
+                    manufacturer: dataSet.string('x00080070') || '',
+                    rows: dataSet.uint16('x00280010'),
+                    columns: dataSet.uint16('x00280011')
+                };
+                // Display DICOM metadata
+                displayDicomMetadata(dicomMetadata);
+                // Get pixel data
+                let pixelData;
+                try {
+                    pixelData = dataSet.byteArray;
+                } catch (error) {
+                    reject(new Error('Unable to access pixel data'));
+                    return;
+                }
+                // Get the pixel data element
+                const pixelDataElement = dataSet.elements.x7fe00010;
+                if (!pixelDataElement) {
+                    reject(new Error('No pixel data found in DICOM file'));
+                    return;
+                }
+                // Get bits allocated and pixel representation
+                const bitsAllocated = dataSet.uint16('x00280100');
+                const pixelRepresentation = dataSet.uint16('x00280103');
+                // Create canvas to render the image
+                const canvas = document.createElement('canvas');
+                const ctx = canvas.getContext('2d');
+                canvas.width = dicomMetadata.columns;
+                canvas.height = dicomMetadata.rows;
+                // Create image data
+                const imageData = ctx.createImageData(canvas.width, canvas.height);
+                // Process pixel data based on bits allocated
+                if (bitsAllocated === 8) {
+                    // 8-bit data
+                    for (let i = 0; i < canvas.width * canvas.height; i++) {
+                        const pixelValue = dataSet.byteArray[pixelDataElement.dataOffset + i];
+                        imageData.data[i * 4] = pixelValue;     // R
+                        imageData.data[i * 4 + 1] = pixelValue; // G
+                        imageData.data[i * 4 + 2] = pixelValue; // B
+                        imageData.data[i * 4 + 3] = 255;        // A
+                    }
+                } else if (bitsAllocated === 16) {
+                    // 16-bit data
+                    // Find min and max values for normalization
+                    let minValue = 65535;
+                    let maxValue = 0;
+                    for (let i = 0; i < canvas.width * canvas.height; i++) {
+                        let pixelValue;
+                        if (pixelRepresentation === 0) {
+                            // Unsigned
+                            pixelValue = dataSet.uint16(pixelDataElement.dataOffset + i * 2);
+                        } else {
+                            // Signed
+                            pixelValue = dataSet.int16(pixelDataElement.dataOffset + i * 2);
+                            // Convert to unsigned for display
+                            pixelValue = pixelValue + 32768;
+                        }
+                        minValue = Math.min(minValue, pixelValue);
+                        maxValue = Math.max(maxValue, pixelValue);
+                    }
+                    // Normalize to 8-bit using min/max values
+                    for (let i = 0; i < canvas.width * canvas.height; i++) {
+                        let pixelValue;
+                        if (pixelRepresentation === 0) {
+                            pixelValue = dataSet.uint16(pixelDataElement.dataOffset + i * 2);
+                        } else {
+                            pixelValue = dataSet.int16(pixelDataElement.dataOffset + i * 2);
+                            pixelValue = pixelValue + 32768;
+                        }
+                        // Normalize using min/max values for better contrast
+                        pixelValue = Math.floor(((pixelValue - minValue) / (maxValue - minValue)) * 255);
+                        imageData.data[i * 4] = pixelValue;     // R
+                        imageData.data[i * 4 + 1] = pixelValue; // G
+                        imageData.data[i * 4 + 2] = pixelValue; // B
+                        imageData.data[i * 4 + 3] = 255;        // A
+                    }
+                } else {
+                    reject(new Error(`Unsupported bits allocated: ${bitsAllocated}`));
+                    return;
+                }
+                // Put image data on canvas
+                ctx.putImageData(imageData, 0, 0);
+                
+                // Create a new canvas for resizing to model's input size (640x640)
+                const resizedCanvas = document.createElement('canvas');
+                const resizedCtx = resizedCanvas.getContext('2d');
+                resizedCanvas.width = imgSize;
+                resizedCanvas.height = imgSize;
+                
+                // Calculate aspect ratio preserving resize
+                const ratio = Math.min(imgSize / canvas.width, imgSize / canvas.height);
+                const newWidth = Math.round(canvas.width * ratio);
+                const newHeight = Math.round(canvas.height * ratio);
+                const offsetX = (imgSize - newWidth) / 2;
+                const offsetY = (imgSize - newHeight) / 2;
+                
+                // Fill background with neutral gray
+                resizedCtx.fillStyle = 'rgb(114, 114, 114)';
+                resizedCtx.fillRect(0, 0, imgSize, imgSize);
+                
+                // Draw the image on the resized canvas
+                resizedCtx.drawImage(canvas, offsetX, offsetY, newWidth, newHeight);
+                
+                // Convert to data URL (JPEG format)
+                const dataURL = resizedCanvas.toDataURL('image/jpeg', 0.95);
+                resolve(dataURL);
+            } catch (error) {
+                reject(new Error(`Error processing DICOM file: ${error.message}`));
+            }
+        };
+        reader.onerror = function() {
+            reject(new Error('Error reading file'));
+        };
+        reader.readAsArrayBuffer(file);
+    });
+}
+// Function to display DICOM metadata
+function displayDicomMetadata(metadata) {
+    dicomMeta.innerHTML = '';
+    const metadataFields = [
+        { label: 'Patient Name', value: metadata.patientName },
+        { label: 'Patient ID', value: metadata.patientID },
+        { label: 'Birth Date', value: metadata.patientBirthDate },
+        { label: 'Gender', value: metadata.patientSex },
+        { label: 'Study Date', value: metadata.studyDate },
+        { label: 'Study Time', value: metadata.studyTime },
+        { label: 'Modality', value: metadata.modality },
+        { label: 'Study Description', value: metadata.studyDescription },
+        { label: 'Series Description', value: metadata.seriesDescription },
+        { label: 'Institution', value: metadata.institutionName },
+        { label: 'Manufacturer', value: metadata.manufacturer },
+        { label: 'Dimensions', value: `${metadata.columns} x ${metadata.rows}` }
+    ];
+    metadataFields.forEach(field => {
+        if (field.value && field.value !== 'Unknown' && field.value !== '') {
+            const div = document.createElement('div');
+            div.innerHTML = `<strong>${field.label}:</strong> ${field.value}`;
+            dicomMeta.appendChild(div);
+        }
+    });
+    dicomInfo.style.display = 'block';
+}
 function handleFileUpload(file) {
-    if (!file.type.startsWith('image/')) {
-        showNotification('Please upload a valid image file.', 'error');
-        return;
-    }
-    const reader = new FileReader();
-    reader.onload = (event) => {
-        preview.src = event.target.result;
-        currentImageDataURL = event.target.result;
-        preview.onload = () => {
-            originalWidth = preview.naturalWidth;
-            originalHeight = preview.naturalHeight;
-            canvas.width = preview.width;
-            canvas.height = preview.height;
-            displayRatioX = preview.width / originalWidth;
-            displayRatioY = preview.height / originalHeight;
-            predictBtn.disabled = !session;
-            previewContainer.style.display = 'block';
-            analysisLoading.classList.remove('active', 'success', 'error');
-            analysisLoading.innerHTML = `
-                <i class="fas fa-spinner fa-spin"></i>
-                <span>Analyzing X-ray image, please wait...</span>
-            `;
-            aiAnalysisSection.style.display = 'none';
-            ageContextAlert.style.display = 'none';
+    const fileName = file.name.toLowerCase();
+    // Check if it's a DICOM file
+    if (fileName.endsWith('.dcm') || fileName.endsWith('.dicom')) {
+        // Process as DICOM
+        processDicomFile(file)
+            .then(dataURL => {
+                preview.src = dataURL;
+                currentImageDataURL = dataURL;
+                preview.onload = () => {
+                    originalWidth = preview.naturalWidth;
+                    originalHeight = preview.naturalHeight;
+                    canvas.width = preview.width;
+                    canvas.height = preview.height;
+                    displayRatioX = preview.width / originalWidth;
+                    displayRatioY = preview.height / originalHeight;
+                    predictBtn.disabled = !session;
+                    previewContainer.style.display = 'block';
+                    analysisLoading.classList.remove('active', 'success', 'error');
+                    analysisLoading.innerHTML = `
+                        <i class="fas fa-spinner fa-spin"></i>
+                        <span>Analyzing X-ray image, please wait...</span>
+                    `;
+                    aiAnalysisSection.style.display = 'none';
+                    ageContextAlert.style.display = 'none';
+                    // Auto-fill patient info from DICOM if available and empty
+                    if (dicomMetadata && dicomMetadata.patientName !== 'Unknown') {
+                        if (!document.getElementById('patientName').value) {
+                            document.getElementById('patientName').value = dicomMetadata.patientName;
+                        }
+                    }
+                    if (dicomMetadata && dicomMetadata.patientID !== 'Unknown') {
+                        if (!document.getElementById('patientId').value) {
+                            document.getElementById('patientId').value = dicomMetadata.patientID;
+                        }
+                    }
+                    if (dicomMetadata && dicomMetadata.patientSex) {
+                        if (!document.getElementById('patientGender').value) {
+                            const genderValue = dicomMetadata.patientSex.toLowerCase().startsWith('m') ? 'male' : 
+                                              dicomMetadata.patientSex.toLowerCase().startsWith('f') ? 'female' : 'other';
+                            document.getElementById('patientGender').value = genderValue;
+                        }
+                    }
+                    if (dicomMetadata && dicomMetadata.patientBirthDate) {
+                        if (!document.getElementById('patientDob').value) {
+                            // Format DICOM date (YYYYMMDD) to HTML date (YYYY-MM-DD)
+                            const dicomDate = dicomMetadata.patientBirthDate;
+                            if (dicomDate.length === 8) {
+                                const formattedDate = `${dicomDate.substring(0, 4)}-${dicomDate.substring(4, 6)}-${dicomDate.substring(6, 8)}`;
+                                document.getElementById('patientDob').value = formattedDate;
+                                // Calculate age
+                                const age = calculateAge(formattedDate);
+                                if (age !== null) {
+                                    document.getElementById('patientAge').value = age;
+                                }
+                            }
+                        }
+                    }
+                };
+            })
+            .catch(error => {
+                showNotification(error.message, 'error');
+                console.error('DICOM processing error:', error);
+            });
+    } else if (file.type.startsWith('image/')) {
+        // Process as regular image
+        dicomMetadata = null;
+        dicomInfo.style.display = 'none';
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            preview.src = event.target.result;
+            currentImageDataURL = event.target.result;
+            preview.onload = () => {
+                originalWidth = preview.naturalWidth;
+                originalHeight = preview.naturalHeight;
+                canvas.width = preview.width;
+                canvas.height = preview.height;
+                displayRatioX = preview.width / originalWidth;
+                displayRatioY = preview.height / originalHeight;
+                predictBtn.disabled = !session;
+                previewContainer.style.display = 'block';
+                analysisLoading.classList.remove('active', 'success', 'error');
+                analysisLoading.innerHTML = `
+                    <i class="fas fa-spinner fa-spin"></i>
+                    <span>Analyzing X-ray image, please wait...</span>
+                `;
+                aiAnalysisSection.style.display = 'none';
+                ageContextAlert.style.display = 'none';
+            };
         };
         reader.onerror = () => {
             showNotification('Error reading the image file. Please try again.', 'error');
         };
-    };
-    reader.readAsDataURL(file);
+        reader.readAsDataURL(file);
+    } else {
+        showNotification('Please upload a valid image or DICOM file (.dcm, .dicom).', 'error');
+        return;
+    }
 }
 imageUpload.addEventListener('change', (e) => {
     const file = e.target.files[0];
@@ -1813,6 +2567,26 @@ previewReportBtn.addEventListener('click', async () => {
     document.getElementById('reportSignature').textContent = document.getElementById('radiologistSignature').value || 'Radiologist Signature';
     const now = new Date();
     document.getElementById('reportStudyDate').textContent = now.toLocaleDateString();
+    // Display DICOM study info if available
+    if (dicomMetadata) {
+        document.getElementById('dicomStudyInfo').style.display = 'block';
+        let studyInfo = '';
+        if (dicomMetadata.studyDescription) studyInfo += dicomMetadata.studyDescription;
+        if (dicomMetadata.seriesDescription) {
+            if (studyInfo) studyInfo += ' - ';
+            studyInfo += dicomMetadata.seriesDescription;
+        }
+        if (dicomMetadata.studyDate) {
+            if (studyInfo) studyInfo += ' | ';
+            studyInfo += `Date: ${dicomMetadata.studyDate}`;
+        }
+        if (dicomMetadata.studyTime) {
+            studyInfo += ` Time: ${dicomMetadata.studyTime}`;
+        }
+        document.getElementById('dicomStudyValue').textContent = studyInfo || 'Available';
+    } else {
+        document.getElementById('dicomStudyInfo').style.display = 'none';
+    }
     const findingsContainer = document.getElementById('reportFindings');
     findingsContainer.innerHTML = '';
     if (currentDetections.length > 0) {
@@ -1949,6 +2723,38 @@ downloadReportBtn.addEventListener('click', async () => {
         doc.text(`Gender: ${document.getElementById('reportPatientGenderDisplay').textContent}`, margin, yPos);
         yPos += 7;
         doc.text(`Age: ${document.getElementById('reportPatientAgeDisplay').textContent}`, margin, yPos);
+        // Add DICOM info if available
+        if (dicomMetadata) {
+            yPos += 15;
+            doc.setFont('times', 'bold');
+            doc.text('DICOM Study Information:', margin, yPos);
+            yPos += 10;
+            doc.setFont('times', 'normal');
+            let studyInfo = '';
+            if (dicomMetadata.studyDescription) studyInfo += dicomMetadata.studyDescription;
+            if (dicomMetadata.seriesDescription) {
+                if (studyInfo) studyInfo += ' - ';
+                studyInfo += dicomMetadata.seriesDescription;
+            }
+            if (studyInfo) {
+                doc.text(`Study: ${studyInfo}`, margin, yPos);
+                yPos += 7;
+            }
+            if (dicomMetadata.studyDate || dicomMetadata.studyTime) {
+                let dateTime = '';
+                if (dicomMetadata.studyDate) dateTime += `Date: ${dicomMetadata.studyDate}`;
+                if (dicomMetadata.studyTime) {
+                    if (dateTime) dateTime += ' ';
+                    dateTime += `Time: ${dicomMetadata.studyTime}`;
+                }
+                doc.text(dateTime, margin, yPos);
+                yPos += 7;
+            }
+            if (dicomMetadata.institutionName) {
+                doc.text(`Institution: ${dicomMetadata.institutionName}`, margin, yPos);
+                yPos += 7;
+            }
+        }
         yPos += 15;
         doc.setFont('times', 'bold');
         doc.setFontSize(12);
@@ -2096,6 +2902,8 @@ downloadReportBtn.addEventListener('click', async () => {
         }
         doc.save('DAS_medhub_Chest_Xray_Report.pdf');
         showNotification('PDF report downloaded successfully!');
+        // Add to history after successful report generation
+        addToHistory();
     } catch (error) {
         console.error('Error generating PDF:', error);
         showNotification(`Error generating PDF: ${error.message}. Please try again.`, 'error');
@@ -2111,6 +2919,13 @@ closeReportBtn.addEventListener('click', () => {
         logoElement.style.display = 'flex';
     }
 });
+// View History button
+viewHistoryBtn.addEventListener('click', () => {
+    historySection.style.display = 'block';
+    historySection.scrollIntoView({ behavior: 'smooth' });
+});
+// Clear History button
+clearHistoryBtn.addEventListener('click', clearAllHistory);
 async function preprocessImage(img) {
     const canvasTemp = document.createElement('canvas');
     const ctxTemp = canvasTemp.getContext('2d');
@@ -2197,7 +3012,7 @@ function drawDetections(detections) {
     ctx.font = 'bold 16px Arial';
     detections.sort((a, b) => {
         const areaA = (a.x2 - a.x1) * (a.y2 - a.y1);
-        const areaB = (b.x2 - b.x1) * (b.y2 - b.y1);
+        const areaB = (b.x2 - b.x2) * (b.y2 - b.y1);
         return areaB - areaA;
     });
     const usedLabelPositions = [];
